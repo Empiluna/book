@@ -61,7 +61,15 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### 5. 启动前端
 
-用 [HBuilderX](https://www.dcloud.io/hbuilderx.html) 打开 `frontend-uni/` 目录，点击 `运行 → 运行到浏览器` 即可。
+```bash
+# 开发调试 — 零配置，双击即开
+open frontend/index.html
+
+# 或通过 Python 静态服务器
+cd frontend && python -m http.server 3000
+```
+
+用 [HBuilderX](https://www.dcloud.io/hbuilderx.html) 打开 `frontend-uni/` 可编译为 Android/iOS/小程序。
 
 ### 6. 访问
 
@@ -102,12 +110,14 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 │               ├── graph.py     # (模块二)
 │               ├── recommend.py # (模块三)
 │               └── ecosystem.py # (模块四)
-├── frontend-uni/                # 📱 uni-app (一套代码 → Android/iOS/小程序/H5)
-│   ├── manifest.json            # App 配置
-│   ├── pages.json               # 路由 + Tab 栏
-│   ├── api/index.js             # API 封装
-│   ├── pages/                   # 6 个页面
-│   ├── components/              # 可复用组件
+├── frontend/                     # ⚡ 开发调试用 (纯HTML，双击即开，秒级刷新)
+│   ├── index.html
+│   ├── css/ js/
+│   └── README.md
+├── frontend-uni/                # 📱 交付产物 (uni-app → Android/iOS/小程序/H5)
+│   ├── manifest.json
+│   ├── pages.json
+│   ├── pages/ components/
 │   └── README.md
 ├── docs/                        # 📚 详细文档
 │   ├── ARCHITECTURE.md

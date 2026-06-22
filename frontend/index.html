@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知书 — 基于知识图谱的个性化荐书系统</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div id="navbar"></div>
+
+    <!-- 页面内容区 -->
+    <div id="app"></div>
+
+    <!--
+    ═══════════════════════════════════════════════════════
+    前端分工标记:
+      A (模块一: 用户画像)    → auth.js、login.js、profile.js
+      B (模块二: 知识图谱)    → admin.js(图谱)、detail.js(图谱)
+      C (模块三: 个性化推荐)  → home.js、detail.js(相似推荐)
+      D (模块四: 阅读生态)    → comment.js、detail.js(评论/试读/购书)、profile.js(书架)、admin.js(购书链接)
+      ALL                    → style.css、api.js、router.js、navbar.js、book-card.js、toast.js
+    ═══════════════════════════════════════════════════════
+    -->
+
+    <!-- ══ 共用基础 (ALL) ══ -->
+    <script src="js/components/toast.js"></script>
+    <script src="js/api.js"></script>
+
+    <!-- ══ 模块一: 用户画像 (负责人: A) ══ -->
+    <script src="js/auth.js"></script>
+
+    <!-- ══ 共用路由/组件 (ALL) ══ -->
+    <script src="js/router.js"></script>
+    <script src="js/components/navbar.js"></script>
+    <script src="js/components/book-card.js"></script>
+
+    <!-- ══ 模块四: 阅读生态 (负责人: D) ══ -->
+    <script src="js/components/comment.js"></script>
+
+    <!-- ══ 页面 (按模块标注负责人) ══ -->
+    <!-- 模块三 (C): 首页推荐 -->
+    <script src="js/pages/home.js"></script>
+    <!-- 模块一 (A): 登录注册 -->
+    <script src="js/pages/login.js"></script>
+    <!-- 模块二/三/四 (B/C/D): 图书详情 -->
+    <script src="js/pages/detail.js"></script>
+    <!-- 模块一/四 (A/D): 个人中心 -->
+    <script src="js/pages/profile.js"></script>
+    <!-- 模块二/四 (B/D): 管理后台 -->
+    <script src="js/pages/admin.js"></script>
+
+    <script>
+    // ═══════════════════════════════════════════
+    // 应用初始化
+    // ═══════════════════════════════════════════
+
+    // 渲染导航栏
+    document.getElementById('navbar').innerHTML = renderNavbar();
+
+    // 注册路由
+    router.on('#/', homePage);
+    router.on('#/login', loginPage);
+    router.on('#/book/:id', detailPage);
+    router.on('#/profile', profilePage);
+    router.on('#/admin', adminPage);
+
+    // 启动路由
+    router.resolve();
+
+    // 全局刷新导航栏（登录/登出后各页面调用）
+    window.refreshNavbar = function() {
+        document.getElementById('navbar').innerHTML = renderNavbar();
+    };
+    </script>
+</body>
+</html>
