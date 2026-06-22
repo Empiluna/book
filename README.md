@@ -6,20 +6,20 @@
 
 ## 团队分工
 
-| 成员 | 模块 | 核心内容 | 后端代码 | 前端代码 |
+| 成员 | 模块 | 核心内容 | 后端代码 | 前端代码 (uni-app) |
 |------|------|---------|---------|---------|
-| **A** | 模块一：用户画像 | 阅读行为采集、兴趣建模、进度同步 | `app/models/user.py` `app/services/user_service.py` `app/api/v1/endpoints/user.py` | `js/auth.js` `js/pages/login.js` `js/pages/profile.js` |
-| **B** | 模块二：知识图谱 | Neo4j实体关系、路径推理、可视化 | `app/models/book.py` `app/services/graph_service.py` `app/api/v1/endpoints/graph.py` | `js/pages/admin.js`(图谱) `js/pages/detail.js`(图谱) |
-| **C** | 模块三：个性化推荐 | ItemCF、图谱推理、混合策略、推荐解释 | `app/services/recommend_service.py` `app/api/v1/endpoints/recommend.py` | `js/pages/home.js` `js/pages/detail.js`(相似推荐) |
-| **D** | 模块四：阅读生态 | 试读、书评、购书链接、书架管理 | `app/models/ecosystem.py` `app/services/ecosystem_service.py` `app/api/v1/endpoints/ecosystem.py` | `js/components/comment.js` `js/pages/detail.js`(试读/购书/评论) `js/pages/admin.js`(购书链接) |
-| **ALL** | 共用基础设施 | 配置、数据库、路由、安全 | `app/core/` `app/main.py` `app/api/deps.py` | `css/style.css` `js/api.js` `js/router.js` `js/components/navbar.js` `js/components/book-card.js` `js/components/toast.js` |
+| **A** | 模块一：用户画像 | 阅读行为采集、兴趣建模、进度同步 | `app/models/user.py` `app/services/user_service.py` `app/api/v1/endpoints/user.py` | `utils/auth.js` `pages/login/` `pages/profile/` |
+| **B** | 模块二：知识图谱 | Neo4j实体关系、路径推理、可视化 | `app/models/book.py` `app/services/graph_service.py` `app/api/v1/endpoints/graph.py` | `pages/admin/`(图谱) `pages/detail/`(图谱) |
+| **C** | 模块三：个性化推荐 | ItemCF、图谱推理、混合策略、推荐解释 | `app/services/recommend_service.py` `app/api/v1/endpoints/recommend.py` | `pages/index/` `pages/detail/`(相似推荐) |
+| **D** | 模块四：阅读生态 | 试读、书评、购书链接、书架管理 | `app/models/ecosystem.py` `app/services/ecosystem_service.py` `app/api/v1/endpoints/ecosystem.py` | `components/comment-list.vue` `pages/shelf/` `pages/detail/`(试读/购书/评论) `pages/admin/`(购书) |
+| **ALL** | 共用基础设施 | 配置、数据库、路由、安全 | `app/core/` `app/main.py` `app/api/deps.py` | `api/index.js` `utils/request.js` `store/index.js` `components/book-card.vue` `manifest.json` `pages.json` |
 
 ## 技术栈
 
 | 组件 | 技术 | 版本 |
 |------|------|------|
 | 后端框架 | FastAPI | 0.115 |
-| 前端 | 原生 HTML/CSS/JS | — |
+| 前端 | uni-app (Vue 3) | 3.x |
 | 关系数据库 | MySQL | 8.0 |
 | 图数据库 | Neo4j | 5.23 |
 | ORM | SQLAlchemy | 2.0 |
@@ -43,28 +43,31 @@ docker-compose up -d
 pip install -r requirements.txt
 ```
 
-### 3. 初始化数据库
+### 3. 导入图书数据
 
 ```bash
-# MySQL 表会自动创建（应用启动时）
-# Neo4j 约束和图谱种子数据：
-docker exec -it bookrec_neo4j cypher-shell -u neo4j -p password123 -f /var/lib/neo4j/import/init.cypher
+# 48本中文图书 → MySQL + Neo4j
+python scripts/import_books.py
 
-# 可选: 填充 MySQL 种子数据
-python scripts/seed_data.py
+# 可选: 从 Open Library 扩展
+python scripts/import_books.py --openlibrary
 ```
 
-### 4. 启动应用
+### 4. 启动后端
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5. 访问
+### 5. 启动前端
 
+用 [HBuilderX](https://www.dcloud.io/hbuilderx.html) 打开 `frontend-uni/` 目录，点击 `运行 → 运行到浏览器` 即可。
+
+### 6. 访问
+
+- **H5 前端**: http://localhost:3000
 - **Swagger API 文档**: http://localhost:8000/docs
-- **ReDoc 文档**: http://localhost:8000/redoc
-- **健康检查**: http://localhost:8000/health
+- **Neo4j Browser**: http://localhost:7474 (neo4j / password123)
 
 ## 项目结构
 
@@ -99,38 +102,28 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 │               ├── graph.py     # (模块二)
 │               ├── recommend.py # (模块三)
 │               └── ecosystem.py # (模块四)
-├── frontend/                    # 🌐 Web 前端 (纯 HTML/CSS/JS)
-│   ├── index.html               # 入口 (Hash 路由)
-│   ├── css/style.css            # 全局样式
-│   ├── js/
-│   │   ├── api.js               # API 封装 (四大模块)
-│   │   ├── auth.js              # 认证管理
-│   │   ├── router.js            # 路由
-│   │   ├── pages/               # 页面逻辑
-│   │   └── components/          # 组件
-│   └── README.md
-├── frontend-uni/                # 📱 uni-app 客户端 (一套代码 → Android/iOS/小程序)
+├── frontend-uni/                # 📱 uni-app (一套代码 → Android/iOS/小程序/H5)
 │   ├── manifest.json            # App 配置
 │   ├── pages.json               # 路由 + Tab 栏
-│   ├── pages/                   # 6个页面 (.vue)
-│   ├── components/              # 可复用组件
 │   ├── api/index.js             # API 封装
+│   ├── pages/                   # 6 个页面
+│   ├── components/              # 可复用组件
 │   └── README.md
 ├── docs/                        # 📚 详细文档
-│   ├── ARCHITECTURE.md          # 系统架构
-│   ├── API_CONTRACTS.md         # 模块间接口契约
+│   ├── ARCHITECTURE.md
+│   ├── API_CONTRACTS.md
 │   ├── MODULE_1_用户画像模块.md
 │   ├── MODULE_2_知识图谱模块.md
 │   ├── MODULE_3_个性化推荐模块.md
 │   ├── MODULE_4_阅读生态模块.md
-│   └── DEVELOPMENT_GUIDE.md     # 开发指南
+│   └── DEVELOPMENT_GUIDE.md
 ├── scripts/
 │   ├── init_db.sql              # MySQL DDL
-│   ├── init_neo4j.cypher        # Neo4j 初始化
-│   └── seed_data.py             # 种子数据
-├── docker-compose.yml           # 基础设施编排
-├── requirements.txt
-└── .gitignore
+│   ├── init_neo4j.cypher        # Neo4j 约束 + 示例数据
+│   ├── import_books.py          # 图书导入 (MySQL + Neo4j 双写)
+│   └── book_seeds.json          # 48本中文图书种子数据
+├── docker-compose.yml
+└── requirements.txt
 ```
 
 ## 模块依赖关系
