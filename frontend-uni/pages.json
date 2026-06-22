@@ -1,0 +1,79 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "发现好书"
+      }
+    },
+    {
+      "path": "pages/shelf/shelf",
+      "style": {
+        "navigationBarTitleText": "我的书架"
+      }
+    },
+    {
+      "path": "pages/profile/profile",
+      "style": {
+        "navigationBarTitleText": "个人中心"
+      }
+    },
+    {
+      "path": "pages/detail/detail",
+      "style": {
+        "navigationBarTitleText": "图书详情"
+      }
+    },
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/admin/admin",
+      "style": {
+        "navigationBarTitleText": "管理后台"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "知书",
+    "navigationBarBackgroundColor": "#2563eb",
+    "backgroundColor": "#f8fafc"
+  },
+  "tabBar": {
+    "color": "#94a3b8",
+    "selectedColor": "#2563eb",
+    "borderStyle": "black",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "iconPath": "static/tab-home.png",
+        "selectedIconPath": "static/tab-home-active.png",
+        "text": "发现"
+      },
+      {
+        "pagePath": "pages/shelf/shelf",
+        "iconPath": "static/tab-shelf.png",
+        "selectedIconPath": "static/tab-shelf-active.png",
+        "text": "书架"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "iconPath": "static/tab-profile.png",
+        "selectedIconPath": "static/tab-profile-active.png",
+        "text": "我的"
+      }
+    ]
+  },
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^book-card": "@/components/book-card.vue",
+      "^comment-list": "@/components/comment-list.vue"
+    }
+  }
+}

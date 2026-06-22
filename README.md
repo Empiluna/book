@@ -99,7 +99,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 │               ├── graph.py     # (模块二)
 │               ├── recommend.py # (模块三)
 │               └── ecosystem.py # (模块四)
-├── frontend/                    # 🌐 前端 SPA
+├── frontend/                    # 🌐 Web 前端 (纯 HTML/CSS/JS)
 │   ├── index.html               # 入口 (Hash 路由)
 │   ├── css/style.css            # 全局样式
 │   ├── js/
@@ -108,6 +108,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 │   │   ├── router.js            # 路由
 │   │   ├── pages/               # 页面逻辑
 │   │   └── components/          # 组件
+│   └── README.md
+├── frontend-uni/                # 📱 uni-app 客户端 (一套代码 → Android/iOS/小程序)
+│   ├── manifest.json            # App 配置
+│   ├── pages.json               # 路由 + Tab 栏
+│   ├── pages/                   # 6个页面 (.vue)
+│   ├── components/              # 可复用组件
+│   ├── api/index.js             # API 封装
 │   └── README.md
 ├── docs/                        # 📚 详细文档
 │   ├── ARCHITECTURE.md          # 系统架构
