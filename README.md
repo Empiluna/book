@@ -135,4 +135,3 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - 🎯 [模块三：个性化推荐](docs/MODULE_3_个性化推荐模块.md)
 - 📖 [模块四：阅读生态](docs/MODULE_4_阅读生态模块.md)
 - 🛠️ [开发指南](docs/DEVELOPMENT_GUIDE.md)
-# book
