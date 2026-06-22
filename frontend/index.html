@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知书 — 基于知识图谱的个性化荐书系统</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div id="navbar"></div>
+
+    <!-- 页面内容区 -->
+    <div id="app"></div>
+
+    <!-- JS 库 (按加载顺序) -->
+    <script src="js/components/toast.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/router.js"></script>
+    <script src="js/components/navbar.js"></script>
+    <script src="js/components/book-card.js"></script>
+    <script src="js/components/comment.js"></script>
+    <script src="js/pages/home.js"></script>
+    <script src="js/pages/login.js"></script>
+    <script src="js/pages/detail.js"></script>
+    <script src="js/pages/profile.js"></script>
+    <script src="js/pages/admin.js"></script>
+
+    <script>
+    // ═══════════════════════════════════════════
+    // 应用初始化
+    // ═══════════════════════════════════════════
+
+    // 渲染导航栏
+    document.getElementById('navbar').innerHTML = renderNavbar();
+
+    // 注册路由
+    router.on('#/', homePage);
+    router.on('#/login', loginPage);
+    router.on('#/book/:id', detailPage);
+    router.on('#/profile', profilePage);
+    router.on('#/admin', adminPage);
+
+    // 启动路由
+    router.resolve();
+
+    // 全局刷新导航栏（登录/登出后各页面调用）
+    window.refreshNavbar = function() {
+        document.getElementById('navbar').innerHTML = renderNavbar();
+    };
+    </script>
+</body>
+</html>

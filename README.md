@@ -18,6 +18,7 @@
 | 组件 | 技术 | 版本 |
 |------|------|------|
 | 后端框架 | FastAPI | 0.115 |
+| 前端 | 原生 HTML/CSS/JS | — |
 | 关系数据库 | MySQL | 8.0 |
 | 图数据库 | Neo4j | 5.23 |
 | ORM | SQLAlchemy | 2.0 |
@@ -97,6 +98,16 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 │               ├── graph.py     # (模块二)
 │               ├── recommend.py # (模块三)
 │               └── ecosystem.py # (模块四)
+├── frontend/                    # 🌐 前端 SPA
+│   ├── index.html               # 入口 (Hash 路由)
+│   ├── css/style.css            # 全局样式
+│   ├── js/
+│   │   ├── api.js               # API 封装 (四大模块)
+│   │   ├── auth.js              # 认证管理
+│   │   ├── router.js            # 路由
+│   │   ├── pages/               # 页面逻辑
+│   │   └── components/          # 组件
+│   └── README.md
 ├── docs/                        # 📚 详细文档
 │   ├── ARCHITECTURE.md          # 系统架构
 │   ├── API_CONTRACTS.md         # 模块间接口契约
