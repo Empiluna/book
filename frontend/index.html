@@ -13,18 +13,42 @@
     <!-- 页面内容区 -->
     <div id="app"></div>
 
-    <!-- JS 库 (按加载顺序) -->
+    <!--
+    ═══════════════════════════════════════════════════════
+    前端分工标记:
+      A (模块一: 用户画像)    → auth.js、login.js、profile.js
+      B (模块二: 知识图谱)    → admin.js(图谱)、detail.js(图谱)
+      C (模块三: 个性化推荐)  → home.js、detail.js(相似推荐)
+      D (模块四: 阅读生态)    → comment.js、detail.js(评论/试读/购书)、profile.js(书架)、admin.js(购书链接)
+      ALL                    → style.css、api.js、router.js、navbar.js、book-card.js、toast.js
+    ═══════════════════════════════════════════════════════
+    -->
+
+    <!-- ══ 共用基础 (ALL) ══ -->
     <script src="js/components/toast.js"></script>
     <script src="js/api.js"></script>
+
+    <!-- ══ 模块一: 用户画像 (负责人: A) ══ -->
     <script src="js/auth.js"></script>
+
+    <!-- ══ 共用路由/组件 (ALL) ══ -->
     <script src="js/router.js"></script>
     <script src="js/components/navbar.js"></script>
     <script src="js/components/book-card.js"></script>
+
+    <!-- ══ 模块四: 阅读生态 (负责人: D) ══ -->
     <script src="js/components/comment.js"></script>
+
+    <!-- ══ 页面 (按模块标注负责人) ══ -->
+    <!-- 模块三 (C): 首页推荐 -->
     <script src="js/pages/home.js"></script>
+    <!-- 模块一 (A): 登录注册 -->
     <script src="js/pages/login.js"></script>
+    <!-- 模块二/三/四 (B/C/D): 图书详情 -->
     <script src="js/pages/detail.js"></script>
+    <!-- 模块一/四 (A/D): 个人中心 -->
     <script src="js/pages/profile.js"></script>
+    <!-- 模块二/四 (B/D): 管理后台 -->
     <script src="js/pages/admin.js"></script>
 
     <script>

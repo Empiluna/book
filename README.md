@@ -6,12 +6,13 @@
 
 ## 团队分工
 
-| 成员 | 模块 | 核心内容 | 代码范围 |
-|------|------|---------|---------|
-| **A** | 模块一：用户画像 | 阅读行为采集、兴趣建模、进度同步 | `app/models/user.py` `app/services/user_service.py` `app/api/v1/endpoints/user.py` |
-| **B** | 模块二：知识图谱 | Neo4j实体关系、路径推理、可视化 | `app/models/book.py` `app/services/graph_service.py` `app/api/v1/endpoints/graph.py` |
-| **C** | 模块三：个性化推荐 | ItemCF、图谱推理、混合策略、推荐解释 | `app/services/recommend_service.py` `app/api/v1/endpoints/recommend.py` |
-| **D** | 模块四：阅读生态 | 试读、书评、购书链接、书架管理 | `app/models/ecosystem.py` `app/services/ecosystem_service.py` `app/api/v1/endpoints/ecosystem.py` |
+| 成员 | 模块 | 核心内容 | 后端代码 | 前端代码 |
+|------|------|---------|---------|---------|
+| **A** | 模块一：用户画像 | 阅读行为采集、兴趣建模、进度同步 | `app/models/user.py` `app/services/user_service.py` `app/api/v1/endpoints/user.py` | `js/auth.js` `js/pages/login.js` `js/pages/profile.js` |
+| **B** | 模块二：知识图谱 | Neo4j实体关系、路径推理、可视化 | `app/models/book.py` `app/services/graph_service.py` `app/api/v1/endpoints/graph.py` | `js/pages/admin.js`(图谱) `js/pages/detail.js`(图谱) |
+| **C** | 模块三：个性化推荐 | ItemCF、图谱推理、混合策略、推荐解释 | `app/services/recommend_service.py` `app/api/v1/endpoints/recommend.py` | `js/pages/home.js` `js/pages/detail.js`(相似推荐) |
+| **D** | 模块四：阅读生态 | 试读、书评、购书链接、书架管理 | `app/models/ecosystem.py` `app/services/ecosystem_service.py` `app/api/v1/endpoints/ecosystem.py` | `js/components/comment.js` `js/pages/detail.js`(试读/购书/评论) `js/pages/admin.js`(购书链接) |
+| **ALL** | 共用基础设施 | 配置、数据库、路由、安全 | `app/core/` `app/main.py` `app/api/deps.py` | `css/style.css` `js/api.js` `js/router.js` `js/components/navbar.js` `js/components/book-card.js` `js/components/toast.js` |
 
 ## 技术栈
 
