@@ -63,4 +63,14 @@ export const api = {
       put(`/ecosystem/shelves/move?book_id=${bookId}&new_shelf=${encodeURIComponent(newShelf)}`),
     getReadingStats: () => get('/ecosystem/stats'),
   },
+
+  // ── 模块五：智能问答助手 (ALL) ──
+  chat: {
+    /** 发送消息获取AI回复 */
+    send: (data) => post('/chat/send', data),
+    /** 获取对话历史 */
+    getHistory: (limit = 50) => get(`/chat/history?limit=${limit}`),
+    /** 清空对话历史 */
+    deleteHistory: () => del('/chat/history'),
+  },
 };

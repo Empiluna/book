@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     RECOMMEND_TOP_N: int = 20              # 默认推荐列表长度
     SIMILARITY_THRESHOLD: float = 0.3      # 相似度阈值
 
+    # ── 大语言模型 (模块五 · 智能问答助手) ──
+    LLM_API_KEY: str = ""                  # API密钥 (OpenAI兼容格式)
+    LLM_MODEL: str = "claude-fable-5"      # 模型名称
+    LLM_BASE_URL: str = ""                 # 自定义API地址 (留空用默认)
+    LLM_MAX_HISTORY: int = 50              # 对话历史保留轮数
+    LLM_TEMPERATURE: float = 0.7           # 生成温度
+
     # ── 试读限制 ──
     TRIAL_PAGES_ANONYMOUS: int = 3         # 未登录试读页数
     TRIAL_PAGES_LOGGED_IN: int = 10        # 登录后试读页数

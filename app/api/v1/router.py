@@ -3,7 +3,7 @@ API v1 总路由
 按四大模块组织端点
 """
 from fastapi import APIRouter
-from app.api.v1.endpoints import user, graph, recommend, ecosystem
+from app.api.v1.endpoints import user, graph, recommend, ecosystem, ai_chat
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -33,4 +33,11 @@ api_router.include_router(
     ecosystem.router,
     prefix="/ecosystem",
     tags=["模块四 · 阅读生态"]
+)
+
+# ── 模块五：智能问答助手 (ALL) ──
+api_router.include_router(
+    ai_chat.router,
+    prefix="/chat",
+    tags=["模块五 · 智能问答助手"]
 )

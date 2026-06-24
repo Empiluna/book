@@ -5,6 +5,7 @@ from app.models.book import (
     Book, Author, Publisher, Tag, Series,
 )
 from app.models.ecosystem import BookComment, CommentLike
+from app.models.chat import ChatHistory
 from app.core.database import Base, engine
 
 __all__ = [
@@ -16,4 +17,6 @@ __all__ = [
     "Book", "Author", "Publisher", "Tag", "Series",
     # 阅读生态 (模块四)
     "BookComment", "CommentLike",
+    # 智能问答助手 (模块五)
+    "ChatHistory",
 ]

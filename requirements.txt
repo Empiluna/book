@@ -25,6 +25,9 @@ python-multipart==0.0.12
 # Search
 elasticsearch==8.15.0
 
+# LLM / AI (模块五 · 智能问答助手)
+openai>=1.0.0
+
 # Utils
 httpx==0.27.0
 redis==5.1.1

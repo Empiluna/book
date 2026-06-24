@@ -214,3 +214,17 @@ CREATE TABLE IF NOT EXISTS comment_likes (
     FOREIGN KEY (comment_id) REFERENCES book_comments(id) ON DELETE CASCADE,
     UNIQUE INDEX idx_like_user_comment (user_id, comment_id)
 ) ENGINE=InnoDB;
+
+-- ═══════════════════════════════════
+-- 对话历史 (模块五 | ALL)
+-- ═══════════════════════════════════
+CREATE TABLE IF NOT EXISTS chat_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    role ENUM('user', 'assistant') NOT NULL COMMENT '消息角色',
+    content TEXT NOT NULL COMMENT '消息内容',
+    intent_type VARCHAR(32) COMMENT '意图类型: function_qa/book_rec/book_qa/personal_qa/admin_help/kg_assist',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_chat_user_time (user_id, created_at)
+) ENGINE=InnoDB;

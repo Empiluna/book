@@ -66,6 +66,9 @@
       <button class="btn-primary" @click="savePurchase">保存购书链接</button>
     </view>
   </view>
+
+  <!-- 管理员智能助手悬浮按钮 -->
+  <chat-widget mode="admin" />
 </template>
 
 <script>

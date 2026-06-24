@@ -52,6 +52,9 @@
       </view>
     </block>
   </view>
+
+  <!-- 智能问答助手悬浮按钮 -->
+  <chat-widget mode="user" />
 </template>
 
 <script>

@@ -35,6 +35,12 @@
       "style": {
         "navigationBarTitleText": "管理后台"
       }
+    },
+    {
+      "path": "pages/chat/chat",
+      "style": {
+        "navigationBarTitleText": "智能荐书助手"
+      }
     }
   ],
   "globalStyle": {
@@ -73,7 +79,8 @@
     "autoscan": true,
     "custom": {
       "^book-card": "@/components/book-card.vue",
-      "^comment-list": "@/components/comment-list.vue"
+      "^comment-list": "@/components/comment-list.vue",
+      "^chat-widget": "@/components/chat-widget.vue"
     }
   }
 }

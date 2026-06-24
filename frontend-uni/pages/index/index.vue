@@ -53,6 +53,9 @@
       <text>暂无数据，请先启动后端并导入图书</text>
     </view>
   </view>
+
+  <!-- 智能问答助手悬浮按钮 -->
+  <chat-widget mode="user" />
 </template>
 
 <script>

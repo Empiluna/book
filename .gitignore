@@ -50,3 +50,6 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.xml
+
+# Design Documents (large binary/docx/diagrams, not for git)
+document/

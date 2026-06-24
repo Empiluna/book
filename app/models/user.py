@@ -34,6 +34,7 @@ class User(Base):
     reading_progress = relationship("ReadingProgress", back_populates="user")
     ratings = relationship("UserRating", back_populates="user")
     comments = relationship("BookComment", back_populates="user")
+    chat_history = relationship("ChatHistory", back_populates="user")
 
 
 class ReadingHistory(Base):
