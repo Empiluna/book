@@ -13,14 +13,17 @@
     <!-- 页面内容区 -->
     <div id="app"></div>
 
+    <!-- 智能问答助手 — 悬浮按钮 + 对话面板 -->
+    <div id="chat-widget-wrap" style="display:none;"></div>
+
     <!--
     ═══════════════════════════════════════════════════════
     前端分工标记:
       A (模块一: 用户画像)    → auth.js、login.js、profile.js
       B (模块二: 知识图谱)    → admin.js(图谱)、detail.js(图谱)
       C (模块三: 个性化推荐)  → home.js、detail.js(相似推荐)
-      D (模块四: 阅读生态)    → comment.js、detail.js(评论/试读/购书)、profile.js(书架)、admin.js(购书链接)
-      ALL                    → style.css、api.js、router.js、navbar.js、book-card.js、toast.js
+      D (模块四: 阅读生态)    → comment.js、detail.js(评论/试读/购书)、profile.js(书架)、admin.js(购书)
+      ALL 共用                → style.css、api.js、router.js、navbar.js、book-card.js、toast.js、chat.js、search.js
     ═══════════════════════════════════════════════════════
     -->
 
@@ -28,35 +31,30 @@
     <script src="js/components/toast.js"></script>
     <script src="js/api.js"></script>
 
-    <!-- ══ 模块一: 用户画像 (负责人: A) ══ -->
+    <!-- ══ 模块一: 用户画像 (A) ══ -->
     <script src="js/auth.js"></script>
 
     <!-- ══ 共用路由/组件 (ALL) ══ -->
     <script src="js/router.js"></script>
     <script src="js/components/navbar.js"></script>
     <script src="js/components/book-card.js"></script>
+    <script src="js/components/chat.js"></script>
 
-    <!-- ══ 模块四: 阅读生态 (负责人: D) ══ -->
+    <!-- ══ 模块四: 阅读生态 (D) ══ -->
     <script src="js/components/comment.js"></script>
 
-    <!-- ══ 页面 (按模块标注负责人) ══ -->
-    <!-- 模块三 (C): 首页推荐 -->
+    <!-- ══ 页面 ══ -->
     <script src="js/pages/home.js"></script>
-    <!-- 模块一 (A): 登录注册 -->
     <script src="js/pages/login.js"></script>
-    <!-- 模块二/三/四 (B/C/D): 图书详情 -->
     <script src="js/pages/detail.js"></script>
-    <!-- 模块一/四 (A/D): 个人中心 -->
     <script src="js/pages/profile.js"></script>
-    <!-- 模块二/四 (B/D): 管理后台 -->
+    <script src="js/pages/search.js"></script>
     <script src="js/pages/admin.js"></script>
 
     <script>
     // ═══════════════════════════════════════════
     // 应用初始化
     // ═══════════════════════════════════════════
-
-    // 渲染导航栏
     document.getElementById('navbar').innerHTML = renderNavbar();
 
     // 注册路由
@@ -64,12 +62,17 @@
     router.on('#/login', loginPage);
     router.on('#/book/:id', detailPage);
     router.on('#/profile', profilePage);
+    router.on('#/search', searchPage);
     router.on('#/admin', adminPage);
 
     // 启动路由
     router.resolve();
 
-    // 全局刷新导航栏（登录/登出后各页面调用）
+    // 渲染聊天悬浮按钮
+    document.getElementById('chat-widget-wrap').insertAdjacentHTML('afterend',
+        '<div id="chat-fab-wrap">' + ChatWidget.renderButton() + '</div>'
+    );
+
     window.refreshNavbar = function() {
         document.getElementById('navbar').innerHTML = renderNavbar();
     };

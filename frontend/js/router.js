@@ -25,19 +25,27 @@ class Router {
     /** 解析当前 hash 并执行对应 handler */
     async resolve() {
         const hash = window.location.hash || '#/';
-        // 提取 #/xxx 部分，忽略 query string
-        const path = hash.split('?')[0];
+        const [path, queryString] = hash.split('?');
+
+        // 解析 query string 参数
+        const queryParams = {};
+        if (queryString) {
+            queryString.split('&').forEach(pair => {
+                const [k, v] = pair.split('=');
+                queryParams[k] = v ? decodeURIComponent(v) : '';
+            });
+        }
 
         // 查找匹配的路由
         let handler = null;
-        let params = {};
+        let params = { ...queryParams };
 
         for (const [pattern, h] of Object.entries(this.routes)) {
             const regex = this._patternToRegex(pattern);
             const match = path.match(regex);
             if (match) {
                 handler = h;
-                params = match.groups || {};
+                Object.assign(params, match.groups || {});
                 break;
             }
         }

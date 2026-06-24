@@ -33,6 +33,7 @@ const Auth = {
         this.setUserInfo({
             user_id: data.user_id,
             username: data.username,
+            is_admin: data.is_admin || false,
         });
         return data;
     },
@@ -43,6 +44,7 @@ const Auth = {
         this.setUserInfo({
             user_id: data.user_id,
             username: data.username,
+            is_admin: data.is_admin || false,
         });
         return data;
     },
