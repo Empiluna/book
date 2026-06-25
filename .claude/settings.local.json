@@ -22,7 +22,9 @@
       "Bash(python3 *)",
       "Bash(where python *)",
       "Bash(pip show *)",
-      "Bash(/c/Users/Emp/AppData/Local/Programs/Python/Python311/python.exe *)"
+      "Bash(/c/Users/Emp/AppData/Local/Programs/Python/Python311/python.exe *)",
+      "PowerShell(pip install *)",
+      "PowerShell(npm *)"
     ]
   }
 }

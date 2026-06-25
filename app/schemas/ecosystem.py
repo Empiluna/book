@@ -12,6 +12,7 @@ class CommentCreate(BaseModel):
     book_id: int
     content: str = Field(..., min_length=1, max_length=5000)
 
+
 class CommentResponse(BaseModel):
     id: int
     user_id: int
@@ -24,52 +25,84 @@ class CommentResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
 class CommentLikeAction(BaseModel):
     comment_id: int
 
-# ── 试读 ──
-class TrialReadRequest(BaseModel):
-    book_id: int
 
+# ── 试读 ──
 class TrialReadResponse(BaseModel):
     book_id: int
     book_title: str
     total_pages: int
-    allowed_pages: int          # 3页（未登录）或 10页（已登录）
-    content_url: str            # 试读内容 URL
-    current_progress: float     # 现有进度百分比
+    allowed_pages: int
+    content_url: str
+    current_progress: float = 0.0
+
+
+class TrialContentResponse(BaseModel):
+    book_id: int
+    book_title: str
+    authors: list[str] = []
+    tags: list[str] = []
+    content: str
+    total_pages: int
+    publisher: Optional[str] = None
+
 
 # ── 购书链接 ──
 class PurchaseLinkUpdate(BaseModel):
-    """管理员配置购书链接"""
     book_id: int
-    url_jd: Optional[str] = None      # 京东
-    url_dd: Optional[str] = None      # 当当
-    url_tb: Optional[str] = None      # 淘宝
+    url_jd: Optional[str] = None
+    url_dd: Optional[str] = None
+    url_tb: Optional[str] = None
+
 
 class PurchaseLinkResponse(BaseModel):
     book_id: int
     book_title: str
-    prices: list[dict]   # [{"platform": "京东", "url": "...", "price": 39.9}]
+    prices: list[dict] = []
+
 
 # ── 书架管理 ──
-class ShelfCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=64)
-    description: Optional[str] = None
-
 class ShelfResponse(BaseModel):
-    id: int
     name: str
     book_count: int = 0
-    created_at: datetime
 
-    model_config = {"from_attributes": True}
+
+class ShelfBookResponse(BaseModel):
+    bookmark_id: int
+    book_id: int
+    book_title: str
+    authors: list[str] = []
+    tags: list[str] = []
+    avg_rating: float = 0.0
+    cover_url: str = ""
+    shelf_name: str
+    added_at: Optional[datetime] = None
+
+
+class MoveBookRequest(BaseModel):
+    book_id: int
+    new_shelf: str = Field(..., min_length=1, max_length=64)
+
+
+class RemoveBookRequest(BaseModel):
+    book_id: int
+    shelf_name: Optional[str] = None
+
 
 # ── 阅读统计 ──
 class ReadingStats(BaseModel):
     user_id: int
-    total_reading_time_minutes: int = 0
+    total_books_read: int = 0
     books_completed: int = 0
     books_reading: int = 0
-    weekly_reading_minutes: list[int] = []  # 7天数组
+    books_want_to_read: int = 0
+    rating_count: int = 0
+    avg_rating_given: float = 0.0
+    shelf_count: int = 0
+    comment_count: int = 0
+    in_progress_count: int = 0
+    weekly_reading_minutes: list[int] = []
     top_tags: list[str] = []

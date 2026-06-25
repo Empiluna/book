@@ -58,14 +58,26 @@ def record_reading_history(db: Session, user_id: int, book_id: int, status: str 
 
 
 def get_reading_history(db: Session, user_id: int, limit: int = 50):
-    """获取用户阅读历史"""
-    return (
+    """获取用户阅读历史（含书名）"""
+    history = (
         db.query(ReadingHistory)
         .filter(ReadingHistory.user_id == user_id)
         .order_by(desc(ReadingHistory.read_at))
         .limit(limit)
         .all()
     )
+    result = []
+    for h in history:
+        book = db.query(Book).get(h.book_id)
+        result.append({
+            "id": h.id,
+            "user_id": h.user_id,
+            "book_id": h.book_id,
+            "book_title": book.title if book else None,
+            "status": h.status,
+            "read_at": h.read_at,
+        })
+    return result
 
 
 def record_search(db: Session, user_id: int, keyword: str):
@@ -233,8 +245,25 @@ def update_reading_progress(
     return progress
 
 
-def get_reading_progress(db: Session, user_id: int):
-    """获取用户全部阅读进度"""
+def get_reading_progress(db: Session, user_id: int) -> list[dict]:
+    """获取所有阅读进度（含书名）"""
+    progress_list = (
+        db.query(ReadingProgress)
+        .filter(ReadingProgress.user_id == user_id)
+        .order_by(desc(ReadingProgress.updated_at))
+        .all()
+    )
+    result = []
+    for p in progress_list:
+        book = db.query(Book).get(p.book_id)
+        result.append({
+            "book_id": p.book_id,
+            "book_title": book.title if book else None,
+            "progress_percent": p.progress_percent,
+            "current_page": p.current_page,
+            "updated_at": p.updated_at,
+        })
+    return result
     return db.query(ReadingProgress).filter(
         ReadingProgress.user_id == user_id
     ).all()
