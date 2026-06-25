@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>模块一 · 阅读画像驾驶舱</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar glass">
+      <div class="brand"><span>KG</span><div><b>荐书系统</b><small>Module 01</small></div></div>
+      <button class="nav active" data-view="dashboard">阅读画像</button>
+      <button class="nav" data-view="progress">进度矩阵</button>
+      <button class="nav" data-view="assistant">智能助手</button>
+      <div class="api-box">
+        <label>后端地址</label>
+        <input id="apiBase" value="http://127.0.0.1:8000" />
+        <button id="saveApi">保存</button>
+      </div>
+    </aside>
+    <main class="main">
+      <section id="dashboard" class="view active-view">
+        <div class="hero">
+          <div class="aurora a1"></div><div class="aurora a2"></div>
+          <p>MODULE 01 · USER PROFILE</p>
+          <h1>阅读画像驾驶舱</h1>
+          <span>用阅读历史、收藏、评分与进度构建可解释用户画像。</span>
+          <div class="hero-actions"><button id="refresh">刷新数据</button><button data-jump="assistant">问智能助手</button></div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><em>⏱</em><strong id="mMinutes">0</strong><span>累计阅读分钟</span></div>
+          <div class="metric"><em>✓</em><strong id="mFinished">0</strong><span>已完成图书</span></div>
+          <div class="metric"><em>★</em><strong id="mRatings">0</strong><span>评分记录</span></div>
+          <div class="metric"><em>◇</em><strong id="mBookmarks">0</strong><span>书架收藏</span></div>
+        </div>
+        <div class="grid">
+          <div class="panel glass"><h2>兴趣标签星云</h2><p>根据行为数据动态生成</p><div id="tags" class="tags"></div></div>
+          <div class="panel dark"><h2>阅读画像雷达</h2><p>偏好 · 活跃 · 完成 · 互动 · 探索</p><div class="radar"><span></span><i></i><b></b></div></div>
+          <div class="panel glass wide"><h2>高分图书池</h2><p>推荐引擎优先参考的兴趣锚点</p><div id="books" class="books"></div></div>
+        </div>
+      </section>
+      <section id="progress" class="view">
+        <div class="section-title"><h1>阅读进度矩阵</h1><p>集中查看每本书的当前页码与进度百分比。</p></div>
+        <div id="progressList" class="progress-list"></div>
+      </section>
+      <section id="assistant" class="view">
+        <div class="chat-card glass">
+          <div class="chat-head"><div class="bot-orb"></div><div><h1>智能问答助手</h1><p>功能问答、自然荐书、图书知识、个人阅读问答</p></div></div>
+          <div class="quick"><button>推荐几本适合人工智能入门的书</button><button>我收藏了哪些书？</button><button>怎么看阅读进度？</button></div>
+          <div id="chatList" class="chat-list"><div class="msg assistant">你好，我可以结合你的阅读画像回答问题。</div></div>
+          <div class="composer"><input id="chatInput" placeholder="输入你的问题..." /><button id="sendChat">发送</button></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
