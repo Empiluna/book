@@ -1,43 +1,19 @@
-"""
-API v1 总路由
-按四大模块组织端点
-"""
 from fastapi import APIRouter
-from app.api.v1.endpoints import user, graph, recommend, ecosystem, ai_chat
 
-api_router = APIRouter(prefix="/api/v1")
+from app.api.v1.endpoints import recommend
+from app.api.v1.endpoints import recommend_extra
 
-# ── 模块一：用户画像 (成员 A) ──
-api_router.include_router(
-    user.router,
-    prefix="/user",
-    tags=["模块一 · 用户画像"]
-)
 
-# ── 模块二：知识图谱 (成员 B) ──
-api_router.include_router(
-    graph.router,
-    prefix="/graph",
-    tags=["模块二 · 知识图谱"]
-)
+api_router = APIRouter()
 
-# ── 模块三：个性化推荐 (成员 C) ──
 api_router.include_router(
     recommend.router,
     prefix="/recommend",
-    tags=["模块三 · 个性化推荐"]
+    tags=["模块三 · 个性化推荐"],
 )
 
-# ── 模块四：阅读生态 (成员 D) ──
 api_router.include_router(
-    ecosystem.router,
-    prefix="/ecosystem",
-    tags=["模块四 · 阅读生态"]
-)
-
-# ── 模块五：智能问答助手 (ALL) ──
-api_router.include_router(
-    ai_chat.router,
-    prefix="/chat",
-    tags=["模块五 · 智能问答助手"]
+    recommend_extra.router,
+    prefix="/recommend-extra",
+    tags=["模块三 · 推荐增强功能"],
 )
