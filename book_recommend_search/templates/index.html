@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>图书推荐测试</title>
+</head>
+
+<body>
+
+<h2>图书推荐系统</h2>
+
+<input
+    type="text"
+    id="isbn"
+    placeholder="输入ISBN">
+
+<button onclick="recommend()">
+    推荐
+</button>
+
+<div id="result"></div>
+
+<script>
+
+function recommend(){
+
+    let isbn =
+        document.getElementById("isbn").value;
+
+    fetch(
+        "/recommend/" + isbn
+    )
+    .then(res => res.json())
+    .then(data => {
+
+        let html = "";
+
+        data.forEach(book => {
+
+            html +=
+            "<p>"
+            + book.isbn
+            + " 分数:"
+            + book.total_score
+            + "</p>";
+        });
+
+        document.getElementById("result")
+            .innerHTML = html;
+    });
+}
+
+</script>
+
+</body>
+</html>
