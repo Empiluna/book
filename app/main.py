@@ -1,91 +1,89 @@
-"""
-══════════════════════════════════════════════════════════════
-基于知识图谱的个性化荐书系统 — FastAPI 主入口
-══════════════════════════════════════════════════════════════
+from __future__ import annotations
 
-启动方式:
-  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-访问:
-  - API 文档 (Swagger): http://localhost:8000/docs
-  - API 文档 (ReDoc):   http://localhost:8000/redoc
-  - 健康检查:            http://localhost:8000/health
-"""
-from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.core.config import get_settings
-from app.core.database import engine, Base
 from app.api.v1.router import api_router
+from app.core.cache import cache
+from app.core.config import get_settings
+from app.core.database import Base, engine, SessionLocal
+from app.services.seed import seed_database
+
+# Import models so SQLAlchemy can create all tables.
+import app.models  # noqa: F401
 
 settings = get_settings()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    # 启动时
-    print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 启动中...")
-    print(f"📖 API 文档: http://localhost:8000/docs")
-    # 创建 MySQL 表（开发环境；生产用 Alembic 迁移）
-    Base.metadata.create_all(bind=engine)
-    yield
-    # 关闭时
-    print("👋 服务关闭")
-
-
 app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
-    description="""## 基于知识图谱的个性化荐书系统
-
-### 四大模块
-| 模块 | 负责人 | 标签 |
-|------|--------|------|
-| 用户画像 | 成员 A | `模块一 · 用户画像` |
-| 知识图谱 | 成员 B | `模块二 · 知识图谱` |
-| 个性化推荐 | 成员 C | `模块三 · 个性化推荐` |
-| 阅读生态 | 成员 D | `模块四 · 阅读生态` |
-
-### 技术栈
-- **后端框架**: FastAPI
-- **关系数据库**: MySQL (SQLAlchemy)
-- **图数据库**: Neo4j (Cypher)
-- **缓存**: Redis
-- **搜索**: ElasticSearch
-- **推荐**: scikit-learn + 自研图谱推理
-""",
-    lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    title=settings.PROJECT_NAME,
+    version="1.1.0-complete-five-fixes",
+    description="四大模块完整增强版：uni-app多端、ElasticSearch检索、PDF/EPUB阅读器、Neo4j Cypher图谱、OpenAI兼容LLM。",
 )
 
-# CORS 配置（开发环境允许所有来源）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"] if settings.CORS_ORIGINS == "*" else settings.CORS_ORIGINS.split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 注册 API 路由
-app.include_router(api_router)
+app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+ROOT = Path(__file__).resolve().parents[1]
+FRONTEND = ROOT / "frontend"
+if FRONTEND.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
 
-@app.get("/", tags=["系统"])
-def root():
-    """系统根路径"""
+@app.on_event("startup")
+def startup() -> None:
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        if settings.SEED_ON_STARTUP:
+            seed_database(db)
+        # Production-grade synchronization. Each service has strict mode flags.
+        from app.services.graph_service import GraphService
+        from app.services.search_service import SearchService
+        GraphService(db).sync_from_mysql()
+        SearchService(db).bulk_index_books()
+    finally:
+        db.close()
+
+
+@app.get("/")
+def index():
+    index_file = FRONTEND / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return {"message": settings.PROJECT_NAME, "docs": "/docs"}
+
+
+@app.get("/health")
+def health():
+    db = SessionLocal()
+    graph_backend = "unknown"
+    search_backend = "unknown"
+    try:
+        from app.services.graph_service import GraphService
+        from app.services.search_service import SearchService
+        graph_backend = "neo4j" if GraphService(db).using_neo4j else "sql-fallback"
+        search_backend = SearchService(db).backend
+    except Exception as exc:
+        graph_backend = f"error:{exc}"
+    finally:
+        db.close()
     return {
-        "app": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "health": "/health",
+        "status": "ok",
+        "modules": ["user-profile", "knowledge-graph", "recommendation", "reading-ecosystem", "ai-chat"],
+        "external_services": {
+            "neo4j": graph_backend,
+            "elasticsearch": search_backend,
+            "redis": cache.status(),
+            "llm_enabled": bool(settings.OPENAI_COMPATIBLE_API_BASE and settings.OPENAI_API_KEY),
+            "strict": {"neo4j": settings.REQUIRE_NEO4J, "elasticsearch": settings.REQUIRE_ELASTICSEARCH, "llm": settings.REQUIRE_LLM},
+        },
     }
-
-
-@app.get("/health", tags=["系统"])
-def health_check():
-    """健康检查"""
-    return {"status": "ok", "app": settings.APP_NAME}

@@ -1,219 +1,275 @@
-"""
-═══════════════════════════════════════════════════════
-【模块四 · 阅读生态】API 端点
-  负责人: D
-  /api/v1/ecosystem/...
-═══════════════════════════════════════════════════════
-"""
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
 
+from app.api.deps import get_current_user, get_current_user_optional, require_admin
+from app.core.config import get_settings
 from app.core.database import get_db
-from app.api.deps import get_current_user, get_current_user_optional, get_admin_user
-from app.models.user import User
-from app.schemas.ecosystem import (
-    CommentCreate, CommentResponse, CommentLikeAction,
-    TrialReadResponse,
-    PurchaseLinkUpdate, PurchaseLinkResponse,
-    ShelfCreate, ShelfResponse,
-    ReadingStats,
-)
-from app.services import ecosystem_service
+from app.models import Book, BookComment, Bookmark, Bookshelf, CommentLike, PurchaseClick, PurchaseLink, User
+from app.schemas import BookmarkRequest, CommentCreate, CommentUpdate, PurchaseLinkCreate, PurchaseLinkUpdate, ShelfCreateRequest, ShelfRenameRequest
+from app.services.serializers import book_card, comment_card, purchase_link_card
+from app.services.user_service import add_bookmark, move_bookmark, reading_stats, update_book_rating
+from app.utils.purchase_channels import build_purchase_channels
 
-router = APIRouter()
+settings = get_settings()
+router = APIRouter(prefix="/ecosystem", tags=["模块四 · 阅读生态"])
 
 
-# ═══════════════════════════════════════════════════════
-# 试读 (3.4.1)
-# ═══════════════════════════════════════════════════════
-
-@router.get("/trial/{book_id}", response_model=TrialReadResponse, summary="获取试读信息")
-def get_trial(
-    book_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    db: Session = Depends(get_db),
-):
-    """
-    获取图书试读权限和信息
-    - 未登录: 可试读3页
-    - 已登录: 可试读10页
-    """
-    info = ecosystem_service.get_trial_info(
-        db, book_id,
-        user_id=current_user.id if current_user else None,
-    )
-    if not info:
-        raise HTTPException(status_code=404, detail="图书不存在")
-    return TrialReadResponse(
-        book_id=info["book_id"],
-        book_title=info["book_title"],
-        total_pages=info["total_pages"],
-        allowed_pages=info["allowed_pages"],
-        content_url=info["content_url"],
-        current_progress=0.0,
-    )
+@router.get("/trial/{book_id}")
+def trial(book_id: int, db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
+    book = db.get(Book, book_id)
+    if not book or book.is_deleted:
+        raise HTTPException(404, "图书不存在")
+    book.trial_count += 1
+    db.commit()
+    allowed_pages = settings.TRIAL_PAGES_LOGIN if user else settings.TRIAL_PAGES_ANONYMOUS
+    text = book.trial_text or book.description or "暂无试读内容。"
+    chunks = [text[i:i + 560] for i in range(0, min(len(text), allowed_pages * 560), 560)] or ["暂无试读内容。"]
+    return {
+        "book": book_card(book),
+        "logged_in": bool(user),
+        "allowed_pages": allowed_pages,
+        "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
+        "pdf_url": book.ebook_pdf_url,
+        "epub_url": book.ebook_epub_url,
+        "reader_url": f"/static/reader.html?book_id={book.id}",
+        "total_preview_pages": len(chunks),
+        "pages": [{"page": i + 1, "content": c} for i, c in enumerate(chunks)],
+        "reader_features": ["PDF.js预览", "EPUB.js预览", "翻页", "缩放", "目录导航", "书签", "进度保存", "夜间模式"],
+    }
 
 
-@router.get("/trial/{book_id}/content", summary="获取试读内容")
-def get_trial_content(
-    book_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-):
-    """
-    返回试读页面的具体内容（Markdown/HTML）
-    TODO: 对接 PDF.js 或直接返回文本
-    """
-    return {"book_id": book_id, "content": "试读内容占位"}
+@router.get("/trial/{book_id}/content")
+def trial_content(book_id: int, page: int = Query(1, ge=1), db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
+    info = trial(book_id, db, user)
+    allowed_pages = info["allowed_pages"]
+    if page > allowed_pages:
+        raise HTTPException(403, "试读页数超过当前权限")
+    pages = info["pages"]
+    return pages[page - 1] if page <= len(pages) else {"page": page, "content": "本页暂无内容"}
 
 
-# ═══════════════════════════════════════════════════════
-# 书评社区 (3.4.3)
-# ═══════════════════════════════════════════════════════
-
-@router.get("/comments/{book_id}", response_model=list[CommentResponse], summary="获取书评列表")
-def get_comments(
-    book_id: int,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db),
-):
-    """获取某图书的评论列表（置顶优先，按点赞数排序）"""
-    return ecosystem_service.get_book_comments(db, book_id, page, page_size)
+@router.get("/comments/{book_id}")
+def comments(book_id: int, db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
+    rows = db.query(BookComment).filter_by(book_id=book_id, is_deleted=False).order_by(BookComment.is_pinned.desc(), BookComment.likes_count.desc(), BookComment.created_at.desc()).all()
+    liked_ids = set()
+    if user:
+        liked_ids = {x.comment_id for x in db.query(CommentLike).filter(CommentLike.user_id == user.id, CommentLike.comment_id.in_([c.id for c in rows] or [0])).all()}
+    return {"items": [comment_card(c, liked=c.id in liked_ids) for c in rows]}
 
 
-@router.post("/comments", summary="发表书评")
-def create_comment(
-    req: CommentCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """对图书发表评论"""
-    comment = ecosystem_service.create_comment(
-        db, current_user.id, req.book_id, req.content,
-    )
-    return {"status": "ok", "comment_id": comment.id}
+@router.post("/comments/{book_id}")
+def add_comment(book_id: int, data: CommentCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not db.get(Book, book_id):
+        raise HTTPException(404, "图书不存在")
+    comment = BookComment(user_id=user.id, book_id=book_id, content=data.content, rating=data.rating)
+    db.add(comment)
+    db.commit(); db.refresh(comment)
+    if data.rating:
+        from app.services.user_service import rate_book
+        rate_book(db, user, book_id, data.rating)
+    update_book_rating(db, book_id)
+    return {"message": "评论已发布", "comment": comment_card(comment)}
 
 
-@router.post("/comments/like", summary="点赞/取消点赞评论")
-def toggle_like(
-    req: CommentLikeAction,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """对评论点赞（重复点赞即取消）"""
-    liked = ecosystem_service.like_comment(db, current_user.id, req.comment_id)
-    return {"status": "ok", "liked": liked}
+@router.put("/comments/{comment_id}")
+def edit_comment(comment_id: int, data: CommentUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    comment = db.get(BookComment, comment_id)
+    if not comment or comment.is_deleted:
+        raise HTTPException(404, "评论不存在")
+    if comment.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "只能编辑自己的评论")
+    if data.content is not None:
+        comment.content = data.content
+    if data.rating is not None:
+        comment.rating = data.rating
+    db.commit(); update_book_rating(db, comment.book_id)
+    return {"message": "评论已更新", "comment": comment_card(comment)}
 
 
-@router.put("/comments/{comment_id}/pin", summary="置顶评论（管理员）")
-def pin_comment(
-    comment_id: int,
-    is_pinned: bool = Query(True),
-    admin: User = Depends(get_admin_user),
-    db: Session = Depends(get_db),
-):
-    """管理员置顶/取消置顶评论"""
-    ecosystem_service.pin_comment(db, comment_id, is_pinned)
-    return {"status": "ok"}
+@router.delete("/comments/{comment_id}")
+def delete_own_comment(comment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    comment = db.get(BookComment, comment_id)
+    if not comment or comment.is_deleted:
+        raise HTTPException(404, "评论不存在")
+    if comment.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "只能删除自己的评论")
+    comment.is_deleted = True
+    db.commit(); update_book_rating(db, comment.book_id)
+    return {"message": "评论已删除"}
 
 
-@router.delete("/comments/{comment_id}", summary="删除评论")
-def delete_comment(
-    comment_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """删除评论（作者本人或管理员）"""
-    ecosystem_service.delete_comment(
-        db, comment_id,
-        user_id=current_user.id,
-        is_admin=current_user.is_admin,
-    )
-    return {"status": "ok"}
+@router.post("/comments/{comment_id}/like")
+def like_comment(comment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    comment = db.get(BookComment, comment_id)
+    if not comment or comment.is_deleted:
+        raise HTTPException(404, "评论不存在")
+    existing = db.query(CommentLike).filter_by(user_id=user.id, comment_id=comment_id).first()
+    if existing:
+        db.delete(existing); comment.likes_count = max(comment.likes_count - 1, 0); liked = False
+    else:
+        db.add(CommentLike(user_id=user.id, comment_id=comment_id)); comment.likes_count += 1; liked = True
+    db.commit()
+    return {"liked": liked, "likes_count": comment.likes_count}
 
 
-# ═══════════════════════════════════════════════════════
-# 购书链接 (3.4.4)
-# ═══════════════════════════════════════════════════════
-
-@router.get("/purchase/{book_id}", response_model=PurchaseLinkResponse, summary="获取购书链接")
-def get_purchase_links(
-    book_id: int,
-    db: Session = Depends(get_db),
-):
-    """获取某图书的多平台购书链接"""
-    links = ecosystem_service.get_purchase_links(db, book_id)
-    return PurchaseLinkResponse(
-        book_id=book_id,
-        book_title="",
-        prices=links,
-    )
+@router.post("/admin/comments/{comment_id}/pin")
+def pin_comment(comment_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    comment = db.get(BookComment, comment_id)
+    if not comment:
+        raise HTTPException(404, "评论不存在")
+    comment.is_pinned = not comment.is_pinned
+    db.commit()
+    return {"message": "置顶状态已切换", "is_pinned": comment.is_pinned}
 
 
-@router.put("/purchase", summary="配置购书链接（管理员）")
-def update_purchase_links(
-    req: PurchaseLinkUpdate,
-    admin: User = Depends(get_admin_user),
-    db: Session = Depends(get_db),
-):
-    """管理员为图书配置购书链接"""
-    ecosystem_service.update_purchase_links(
-        db, req.book_id,
-        url_jd=req.url_jd, url_dd=req.url_dd, url_tb=req.url_tb,
-    )
-    return {"status": "ok"}
+@router.delete("/admin/comments/{comment_id}")
+def delete_comment(comment_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    comment = db.get(BookComment, comment_id)
+    if not comment:
+        raise HTTPException(404, "评论不存在")
+    comment.is_deleted = True
+    db.commit(); update_book_rating(db, comment.book_id)
+    return {"message": "评论已删除"}
 
 
-# ═══════════════════════════════════════════════════════
-# 书架管理 (3.4.5)
-# ═══════════════════════════════════════════════════════
-
-@router.get("/shelves", response_model=list[ShelfResponse], summary="获取书架列表")
-def get_shelves(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """获取用户的所有书架"""
-    return ecosystem_service.get_user_bookshelves(db, current_user.id)
+@router.get("/admin/comments")
+def admin_comments(book_id: int | None = None, username: str | None = None, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    q = db.query(BookComment).filter(BookComment.is_deleted == False)  # noqa: E712
+    if book_id:
+        q = q.filter(BookComment.book_id == book_id)
+    rows = q.order_by(BookComment.created_at.desc()).all()
+    if username:
+        rows = [r for r in rows if r.user and username in r.user.username]
+    return {"items": [comment_card(c) for c in rows], "total": len(rows)}
 
 
-@router.get("/shelves/{shelf_name}", summary="获取书架中图书")
-def get_shelf_books(
-    shelf_name: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """获取指定书架中的图书列表"""
-    return ecosystem_service.get_shelf_books(db, current_user.id, shelf_name)
+@router.get("/purchase-links/{book_id}")
+def purchase_links(book_id: int, db: Session = Depends(get_db)):
+    book = db.get(Book, book_id)
+    if not book:
+        raise HTTPException(404, "图书不存在")
+    links = [purchase_link_card(x) for x in book.purchase_links if x.is_active]
+    best = min(links, key=lambda x: x["price"] if x.get("price") is not None else 10**9) if links else None
+    author = " ".join(a.name for a in book.authors)
+    return {
+        "book_id": book_id,
+        "links": links,
+        "best_price": best,
+        "purchase_channels": build_purchase_channels(book.title, author, book.isbn or ""),
+    }
 
 
-@router.put("/shelves/move", summary="移动图书到其他书架")
-def move_book(
-    book_id: int,
-    new_shelf: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """将图书移动到另一个书架"""
-    ecosystem_service.move_book_to_shelf(db, current_user.id, book_id, new_shelf)
-    return {"status": "ok"}
+@router.post("/purchase-click/{book_id}")
+def purchase_click(book_id: int, channel: str, price: float | None = None, db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
+    db.add(PurchaseClick(user_id=user.id if user else None, book_id=book_id, channel=channel, price=price))
+    book = db.get(Book, book_id)
+    if book:
+        book.hot_score += 0.5
+    db.commit()
+    return {"message": "购书跳转已记录"}
 
 
-# ═══════════════════════════════════════════════════════
-# 阅读统计 (3.4.2)
-# ═══════════════════════════════════════════════════════
+@router.post("/purchase-links")
+def create_purchase_link(data: PurchaseLinkCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if not db.get(Book, data.book_id):
+        raise HTTPException(404, "图书不存在")
+    link = PurchaseLink(**data.model_dump())
+    db.add(link); db.commit(); db.refresh(link)
+    return {"message": "购书链接已新增", "link": purchase_link_card(link)}
 
-@router.get("/stats", response_model=ReadingStats, summary="阅读统计")
-def get_reading_stats(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """获取用户阅读统计数据"""
-    # TODO: 实现完整的统计
-    return ReadingStats(
-        user_id=current_user.id,
-        total_reading_time_minutes=0,
-        books_completed=0,
-        books_reading=0,
-    )
+
+@router.put("/purchase-links/{link_id}")
+def update_purchase_link(link_id: int, data: PurchaseLinkUpdate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    link = db.get(PurchaseLink, link_id)
+    if not link:
+        raise HTTPException(404, "购书链接不存在")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(link, k, v)
+    db.commit()
+    return {"message": "购书链接已更新", "link": purchase_link_card(link)}
+
+
+@router.delete("/purchase-links/{link_id}")
+def delete_purchase_link(link_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    link = db.get(PurchaseLink, link_id)
+    if not link:
+        raise HTTPException(404, "购书链接不存在")
+    link.is_active = False
+    db.commit()
+    return {"message": "购书链接已禁用"}
+
+
+@router.get("/shelves")
+def shelves(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = db.query(Bookmark).filter_by(user_id=user.id).all()
+    grouped: dict[str, list] = {}
+    for bm in rows:
+        grouped.setdefault(bm.shelf_name, []).append({"bookmark_id": bm.id, "reading_status": bm.reading_status, "created_at": bm.created_at.isoformat(), "book": book_card(bm.book)})
+    for shelf in db.query(Bookshelf).filter_by(user_id=user.id).all():
+        grouped.setdefault(shelf.name, [])
+    for name in ["想读", "在读", "已读"]:
+        grouped.setdefault(name, [])
+    return {"shelves": [{"name": name, "count": len(items), "books": items} for name, items in grouped.items()]}
+
+
+@router.post("/shelves")
+def create_shelf(data: ShelfCreateRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if db.query(Bookshelf).filter_by(user_id=user.id).count() >= settings.MAX_SHELVES_PER_USER:
+        raise HTTPException(400, "书架数量已达上限")
+    if db.query(Bookshelf).filter_by(user_id=user.id, name=data.name).first():
+        raise HTTPException(400, "该书架名称已存在")
+    shelf = Bookshelf(user_id=user.id, name=data.name, is_default=False)
+    db.add(shelf); db.commit(); db.refresh(shelf)
+    return {"message": "书架已创建", "shelf": {"id": shelf.id, "name": shelf.name}}
+
+
+@router.put("/shelves/{shelf_name}")
+def rename_shelf(shelf_name: str, data: ShelfRenameRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    shelf = db.query(Bookshelf).filter_by(user_id=user.id, name=shelf_name).first()
+    if not shelf:
+        raise HTTPException(404, "书架不存在")
+    if shelf.is_default:
+        raise HTTPException(400, "默认书架不可重命名")
+    for bm in db.query(Bookmark).filter_by(user_id=user.id, shelf_name=shelf_name).all():
+        bm.shelf_name = data.new_name
+    shelf.name = data.new_name
+    db.commit()
+    return {"message": "书架已重命名"}
+
+
+@router.delete("/shelves/{shelf_name}")
+def delete_shelf(shelf_name: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    shelf = db.query(Bookshelf).filter_by(user_id=user.id, name=shelf_name).first()
+    if not shelf:
+        raise HTTPException(404, "书架不存在")
+    if shelf.is_default or shelf_name in {"想读", "在读", "已读"}:
+        raise HTTPException(400, "默认书架不可删除")
+    db.query(Bookmark).filter_by(user_id=user.id, shelf_name=shelf_name).delete()
+    db.delete(shelf); db.commit()
+    return {"message": "书架已删除"}
+
+
+@router.post("/shelves/book/{book_id}")
+def add_to_shelf(book_id: int, data: BookmarkRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return add_bookmark(db, user, book_id, data.shelf_name, data.reading_status)
+
+
+@router.put("/shelves/book/{book_id}/move")
+def move_book(book_id: int, from_shelf: str, to_shelf: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return move_bookmark(db, user, book_id, from_shelf, to_shelf)
+
+
+@router.delete("/shelves/book/{book_id}")
+def remove_from_shelf(book_id: int, shelf_name: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(Bookmark).filter_by(user_id=user.id, book_id=book_id, shelf_name=shelf_name).first()
+    if not row:
+        raise HTTPException(404, "书架中没有这本书")
+    db.delete(row); db.commit()
+    return {"message": "已从书架移除"}
+
+
+@router.get("/stats")
+def ecosystem_stats(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return reading_stats(db, user)

@@ -1,146 +1,86 @@
-"""
-═══════════════════════════════════════════════════════
-【模块二 · 知识图谱】API 端点
-  负责人: B
-  /api/v1/graph/...
-═══════════════════════════════════════════════════════
-"""
-from fastapi import APIRouter, Depends, HTTPException, Query
-from app.core.database import get_neo4j_session, get_db
-from app.api.deps import get_admin_user
-from app.models.user import User
-from app.schemas.book import (
-    GraphQueryRequest, GraphQueryResponse, GraphCandidate,
-    GraphEntityCreate, GraphRelationCreate, BookDetail, GraphPath,
-)
-from app.services.graph_service import GraphService
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-router = APIRouter()
+from app.api.deps import get_current_user_optional, require_admin
+from app.core.database import get_db
+from app.models import User
+from app.schemas import GraphEntityCreate, GraphPathRequest, GraphRelationCreate
+from app.services.graph_service import GraphService
+
+router = APIRouter(prefix="/graph", tags=["模块二 · 知识图谱"])
 
 
-# ═══════════════════════════════════════════════════════
-# 图谱查询 (3.2.2) — 模块三的核心依赖
-# ═══════════════════════════════════════════════════════
+@router.post("/paths")
+def paths(data: GraphPathRequest, db: Session = Depends(get_db)):
+    return GraphService(db).find_paths(data.book_id, data.max_hops, data.top_k, data.path_weights)
 
-@router.post("/paths", response_model=GraphQueryResponse, summary="【接口契约】图谱路径查询")
-def query_paths(
-    req: GraphQueryRequest,
-    session=Depends(get_neo4j_session),
+
+@router.get("/semantic-paths/{book_id}")
+def semantic_paths(book_id: int, top_k: int = Query(10, ge=1, le=50), db: Session = Depends(get_db)):
+    """返回领域、主题、适读人群、关键词、难度和续读路径等高级语义推理结果。"""
+    return GraphService(db).semantic_paths(book_id, top_k)
+
+
+@router.get("/profile-graph")
+def profile_graph(
+    mode: str = Query("profile", pattern="^(profile|recent|high_rated|manual)$"),
+    book_id: int | None = Query(None),
+    depth: int = Query(2, ge=1, le=2),
+    limit: int = Query(24, ge=10, le=60),
+    user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """
-    【模块二 → 模块三 核心接口】
-    从指定图书出发，通过图谱多跳路径发现候选图书。
-    模块三的推荐引擎通过此接口获取知识图谱推理结果。
-
-    路径类型：
-    - 同作者: Book → Author → Book
-    - 同标签: Book → Tag → Book
-    - 同系列: Book → Series → Book
-    - 同出版社: Book → Publisher → Book
-    - 多跳: Book → Author → Book → Tag → Book
-    """
-    path_weights = {
-        "AUTHORED": req.author_weight,
-        "TAGGED": req.tag_weight,
-        "PUBLISHED": req.publisher_weight,
-        "SERIES_OF": req.series_weight,
-    }
-    result = GraphService.find_paths(
-        session,
-        book_id=req.book_id,
-        max_hops=req.max_hops,
-        top_k=req.top_k,
-        path_weights=path_weights,
-    )
-
-    # 转换为 Pydantic 模型
-    candidates = []
-    for c in result.get("candidates", []):
-        paths = []
-        for p in c.get("paths", []):
-            paths.append(GraphPath(
-                nodes=[],
-                relation_chain=[p.get("path_type", "")],
-                total_weight=p.get("weight", 0.5),
-            ))
-        candidates.append(GraphCandidate(
-            book_id=c["book_id"],
-            book_title=c["book_title"],
-            paths=paths,
-            final_score=c.get("final_score", 0.0),
-        ))
-
-    return GraphQueryResponse(
-        source_book_id=result["source_book_id"],
-        source_book_title=result.get("source_book_title", ""),
-        candidates=candidates,
-    )
+    """用户侧图谱：默认以“我的阅读画像”为中心，也可切换最近阅读/高分图书/手动选择图书。"""
+    return GraphService(db).profile_graph(user, mode=mode, book_id=book_id, depth=depth, limit=limit)
 
 
-# ═══════════════════════════════════════════════════════
-# 图谱管理 - 管理员
-# ═══════════════════════════════════════════════════════
-
-@router.post("/entity", summary="创建图谱实体（管理员）")
-def create_entity(
-    req: GraphEntityCreate,
-    admin: User = Depends(get_admin_user),
-    session=Depends(get_neo4j_session),
-):
-    """管理员导入图书/作者/标签等实体到 Neo4j"""
-    GraphService.create_book_entity(
-        session,
-        book_id=req.properties.get("id", 0),
-        title=req.entity_name,
-        **req.properties,
-    )
-    return {"status": "ok"}
+@router.get("/explain/{source_id}/{target_id}")
+def explain_between(source_id: int, target_id: int, db: Session = Depends(get_db)):
+    """解释两本书之间的图谱推理路径。"""
+    return GraphService(db).explain_between(source_id, target_id)
 
 
-@router.post("/relation", summary="创建图谱关系（管理员）")
-def create_relation(
-    req: GraphRelationCreate,
-    admin: User = Depends(get_admin_user),
-    session=Depends(get_neo4j_session),
-):
-    """管理员创建两个实体间的关系"""
-    GraphService.create_relation(
-        session,
-        source_type=req.source_type,
-        source_id=req.source_id,
-        relation=req.relation,
-        target_type=req.target_type,
-        target_id=req.target_id,
-    )
-    return {"status": "ok"}
+@router.get("/subgraph/{book_id}")
+def subgraph(book_id: int, depth: int = Query(1, ge=1, le=2), db: Session = Depends(get_db)):
+    return GraphService(db).subgraph(book_id, depth)
 
 
-@router.get("/visualize/{book_id}", summary="获取子图可视化数据")
-def get_visualization(
-    book_id: int,
-    depth: int = Query(2, ge=1, le=4),
-    session=Depends(get_neo4j_session),
-):
-    """
-    获取以某图书为中心的子图数据
-    用于前端图谱可视化（D3.js / ECharts）
-    """
-    return GraphService.get_subgraph(session, book_id, depth)
+@router.get("/stats")
+def stats(db: Session = Depends(get_db)):
+    return GraphService(db).stats()
 
 
-@router.get("/stats", summary="图谱统计")
-def get_graph_stats(session=Depends(get_neo4j_session)):
-    """获取图谱整体统计数据"""
-    return GraphService.get_stats(session)
+@router.post("/admin/init")
+def init(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return GraphService(db).init_graph_constraints()
 
 
-@router.post("/init", summary="初始化图谱约束（管理员）")
-def init_graph(
-    admin: User = Depends(get_admin_user),
-    session=Depends(get_neo4j_session),
-):
-    """首次启动时初始化 Neo4j 约束和索引"""
-    GraphService.init_graph_constraints(session)
-    return {"status": "ok", "message": "图谱约束已创建"}
+@router.post("/admin/sync")
+def sync(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return GraphService(db).sync_from_mysql()
+
+
+@router.post("/admin/semantic/enrich")
+def semantic_enrich(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """重新构建基础图谱和高级语义图谱。"""
+    return GraphService(db).sync_from_mysql()
+
+
+@router.post("/admin/entities")
+def create_entity(data: GraphEntityCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    props = {**(data.properties or {})}
+    if data.name:
+        props.setdefault("name", data.name)
+    return GraphService(db).create_entity(data.entity_type, data.entity_id, props)
+
+
+@router.post("/admin/relations")
+def create_relation(data: GraphRelationCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return GraphService(db).create_relation(data.source_type, data.source_id, data.relation_type, data.target_type, data.target_id, data.weight)
+
+
+@router.post("/admin/cypher")
+def cypher(payload: dict, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return GraphService(db).query_cypher(payload.get("cypher", "RETURN 1"), payload.get("params") or {})

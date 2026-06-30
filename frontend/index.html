@@ -1,81 +1,132 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>知书 — 基于知识图谱的个性化荐书系统</title>
-    <link rel="stylesheet" href="css/style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>知人知书 · 个性化荐书系统</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
-    <!-- 导航栏 -->
-    <div id="navbar"></div>
+  <div class="bg-orb orb-a"></div><div class="bg-orb orb-b"></div><div class="bg-orb orb-c"></div>
+  <aside class="rail">
+    <div class="brand"><div class="logo">KG</div><div><b>知人知书</b><span>Knowledge Reading</span></div></div>
+    <nav>
+      <button class="nav active" data-view="home">首页推荐</button>
+      <button class="nav" data-view="discover">搜索发现</button>
+      <button class="nav" data-view="graph">知识图谱</button>
+      <button class="nav" data-view="shelf">我的书架</button>
+      <button class="nav" data-view="profile">个人画像</button>
+      <button class="nav" data-view="admin">管理后台</button>
+    </nav>
+    <div class="login-card">
+      <div id="userBadge">未登录</div>
+      <div class="login-row"><input id="loginUser" value="demo" placeholder="用户名/邮箱"><input id="loginPass" value="demo123" type="password" placeholder="密码"></div>
+      <button id="loginBtn" class="primary small">登录演示账号</button>
+      <button id="adminBtn" class="ghost small">管理员登录</button>
+    </div>
+  </aside>
 
-    <!-- 页面内容区 -->
-    <div id="app"></div>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Knowledge Graph · Hybrid Recommendation · Reading Ecosystem</p>
+        <h1 id="pageTitle">首页个性化推荐</h1>
+      </div>
+      <div id="topSearchbar" class="searchbar">
+        <input id="globalSearch" placeholder="搜索书名 / 作者 / 标签，例如：人工智能、三体、历史" />
+        <button id="searchBtn">搜索</button>
+      </div>
+    </header>
 
-    <!-- 智能问答助手 — 悬浮按钮 + 对话面板 -->
-    <div id="chat-widget-wrap" style="display:none;"></div>
+    <section id="home" class="view active">
+      <div class="hero glass">
+        <div>
+          <span class="pill">四大模块整合增强版</span>
+          <h2>用用户画像理解你，用知识图谱解释推荐。</h2>
+          <p>系统融合高级知识图谱语义推理、ItemCF、热门推荐和新书推荐，提供可解释的个性化荐书、试读、书评、购书和书架管理闭环。</p>
+          <div class="hero-actions"><button class="primary" onclick="loadRecommendations()">刷新推荐</button><button class="ghost" onclick="openAssistant()">问智能助手</button></div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><b id="mBooks">--</b><span>图书</span></div>
+          <div class="metric"><b id="mComments">--</b><span>评论</span></div>
+          <div class="metric"><b id="mGraph">--</b><span>图谱节点</span></div>
+          <div class="metric"><b>4</b><span>核心模块</span></div>
+        </div>
+      </div>
+      <div class="section-title"><h3>为你推荐</h3><span>Hybrid: KG 40% + CF 40% + Hot 10% + New 10%</span></div>
+      <div id="recommendGrid" class="book-grid"></div>
+      <div class="split">
+        <div class="panel glass"><div class="section-title compact"><h3>热门图书</h3><button onclick="loadHot()">刷新</button></div><div id="hotList" class="mini-list"></div></div>
+        <div class="panel glass"><div class="section-title compact"><h3>新书上架</h3><button onclick="loadNew()">刷新</button></div><div id="newList" class="mini-list"></div></div>
+      </div>
+    </section>
 
-    <!--
-    ═══════════════════════════════════════════════════════
-    前端分工标记:
-      A (模块一: 用户画像)    → auth.js、login.js、profile.js
-      B (模块二: 知识图谱)    → admin.js(图谱)、detail.js(图谱)
-      C (模块三: 个性化推荐)  → home.js、detail.js(相似推荐)
-      D (模块四: 阅读生态)    → comment.js、detail.js(评论/试读/购书)、profile.js(书架)、admin.js(购书)
-      ALL 共用                → style.css、api.js、router.js、navbar.js、book-card.js、toast.js、chat.js、search.js
-    ═══════════════════════════════════════════════════════
-    -->
+    <section id="discover" class="view">
+      <div class="panel glass"><div class="section-title compact"><h3>搜索与分类浏览</h3><span id="resultHint">输入关键词后检索</span></div><div class="hot-search-box"><b>热门搜索</b><div id="hotSearches" class="chips"></div></div><div id="chips" class="chips"></div><div id="bookGrid" class="book-grid"></div></div>
+    </section>
 
-    <!-- ══ 共用基础 (ALL) ══ -->
-    <script src="js/components/toast.js"></script>
-    <script src="js/api.js"></script>
+    <section id="graph" class="view">
+      <div class="panel glass">
+        <div class="section-title compact">
+          <div>
+            <h3 id="graphTitle">我的画像图谱</h3>
+            <span id="graphSubtitle">默认以用户画像为中心，综合高分书、在读书、收藏和长期偏好生成多源推荐路径</span>
+          </div>
+          <button onclick="loadGraph()">重绘图谱</button>
+        </div>
+        <div class="graph-toolbar">
+          <label>图谱模式
+            <select id="graphMode" onchange="onGraphModeChange()">
+              <option value="profile">我的画像图谱</option>
+              <option value="recent">最近阅读图谱</option>
+              <option value="high_rated">高分图书图谱</option>
+              <option value="manual">手动选择图书</option>
+            </select>
+          </label>
+          <label id="graphBookPickerWrap" class="hidden">中心图书
+            <select id="graphBookSelect" onchange="loadGraph()"></select>
+          </label>
+          <label>节点上限
+            <select id="graphNodeLimit" onchange="loadGraph()">
+              <option value="20" selected>20</option>
+              <option value="24">24</option>
+              <option value="32">32</option>
+            </select>
+          </label>
+          <button onclick="loadGraph()">应用</button>
+          <span class="hint">手动模式：先选择“手动选择图书”，再在“中心图书”下拉框选择一本书，点击应用。</span>
+        </div>
+        <div class="graph-layout">
+          <div class="graph-canvas-card">
+            <svg id="graphSvg" viewBox="0 0 1180 720"></svg>
+          </div>
+          <aside id="graphInfo" class="graph-info"></aside>
+        </div>
+      </div>
+    </section>
 
-    <!-- ══ 模块一: 用户画像 (A) ══ -->
-    <script src="js/auth.js"></script>
+    <section id="shelf" class="view">
+      <div class="panel glass"><div class="section-title compact"><h3>我的书架</h3><span>想读 / 在读 / 已读 / 自定义书架</span></div><div id="shelfGrid" class="shelf-grid"></div></div>
+    </section>
 
-    <!-- ══ 共用路由/组件 (ALL) ══ -->
-    <script src="js/router.js"></script>
-    <script src="js/components/navbar.js"></script>
-    <script src="js/components/book-card.js"></script>
-    <script src="js/components/chat.js"></script>
+    <section id="profile" class="view">
+      <div class="split profile-split"><div class="panel glass"><h3>阅读统计</h3><div id="profileStats" class="stats-cards"></div><canvas id="trendCanvas" width="640" height="240"></canvas></div><div class="panel glass"><h3>兴趣画像</h3><div id="tagCloud" class="tag-cloud"></div><div id="profileBooks" class="mini-list"></div></div></div>
+      <div class="panel glass history-panel"><div class="section-title compact"><h3>阅读历史记录</h3><span>按图书去重，展示最近阅读/收藏/评分行为</span></div><div id="historyList" class="mini-list"></div></div>
+    </section>
 
-    <!-- ══ 模块四: 阅读生态 (D) ══ -->
-    <script src="js/components/comment.js"></script>
+    <section id="admin" class="view">
+      <div class="admin-grid">
+        <div class="panel glass"><h3>运营总览</h3><div id="adminStats" class="stats-cards"></div></div>
+        <div class="panel glass"><h3>图谱统计</h3><div id="adminGraphStats" class="stats-cards"></div></div>
+        <div class="panel glass wide"><h3>管理说明</h3><p>管理员账号：admin / admin123。可通过 Swagger 进一步操作图书、知识图谱、购书链接和评论置顶/删除。</p><a class="doclink" href="/docs" target="_blank">打开 Swagger API 文档</a></div>
+      </div>
+    </section>
+  </main>
 
-    <!-- ══ 页面 ══ -->
-    <script src="js/pages/home.js"></script>
-    <script src="js/pages/login.js"></script>
-    <script src="js/pages/detail.js"></script>
-    <script src="js/pages/profile.js"></script>
-    <script src="js/pages/search.js"></script>
-    <script src="js/pages/admin.js"></script>
+  <div id="detailModal" class="modal hidden"><div class="modal-card"><button class="close" onclick="closeDetail()">×</button><div id="detailContent"></div></div></div>
+  <div id="readerModal" class="modal hidden"><div class="reader-card"><button class="close" onclick="closeReader()">×</button><div id="readerContent"></div></div></div>
+  <div id="assistant" class="assistant hidden"><div class="assistant-head"><b>智能问答助手</b><button onclick="openAssistant()">×</button></div><div id="chatBox" class="chat-box"></div><div class="chat-input"><input id="chatInput" placeholder="例如：推荐几本人工智能入门书"><button onclick="sendChat()">发送</button></div></div>
 
-    <script>
-    // ═══════════════════════════════════════════
-    // 应用初始化
-    // ═══════════════════════════════════════════
-    document.getElementById('navbar').innerHTML = renderNavbar();
-
-    // 注册路由
-    router.on('#/', homePage);
-    router.on('#/login', loginPage);
-    router.on('#/book/:id', detailPage);
-    router.on('#/profile', profilePage);
-    router.on('#/search', searchPage);
-    router.on('#/admin', adminPage);
-
-    // 启动路由
-    router.resolve();
-
-    // 渲染聊天悬浮按钮
-    document.getElementById('chat-widget-wrap').insertAdjacentHTML('afterend',
-        '<div id="chat-fab-wrap">' + ChatWidget.renderButton() + '</div>'
-    );
-
-    window.refreshNavbar = function() {
-        document.getElementById('navbar').innerHTML = renderNavbar();
-    };
-    </script>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>
