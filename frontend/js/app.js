@@ -372,11 +372,132 @@ function drawTrend(rows){
   });
 }
 async function loadAdmin(){
-  if(!token){ $('adminStats').innerHTML='请先以管理员登录'; return; }
+  if(!token){
+    $('adminStats').innerHTML='<p class="meta">请先以管理员登录。</p>';
+    $('adminGraphStats').innerHTML='';
+    ['adminBookList','adminUserList','adminCommentList','adminConfigList','adminGraphResult'].forEach(id=>{ if($(id)) $(id).innerHTML = ''; });
+    return;
+  }
   const dash=await api('/admin/dashboard').catch(e=>null); const gs=await api('/graph/stats').catch(e=>null);
-  if(!dash){ $('adminStats').innerHTML='当前账号无管理员权限'; return; }
+  if(!dash){
+    $('adminStats').innerHTML='<p class="meta">当前账号无管理员权限。</p>';
+    $('adminGraphStats').innerHTML='';
+    return;
+  }
   $('adminStats').innerHTML=Object.entries(dash.cards).map(([k,v])=>stat(k,v)).join('');
   $('adminGraphStats').innerHTML=gs?Object.entries(gs).filter(([k,v])=>typeof v==='number').map(([k,v])=>stat(k,v)).join(''):'';
+  await Promise.allSettled([adminLoadBooks(), adminLoadUsers(), adminLoadComments(), adminLoadSettings()]);
+}
+function adminSwitchTab(name){
+  const panes = {books:'adminBooks', users:'adminUsers', comments:'adminComments', settings:'adminSettings', graphAdmin:'adminGraphAdmin'};
+  document.querySelectorAll('.admin-tab').forEach(btn=>btn.classList.toggle('active', btn.dataset.adminTab === name));
+  document.querySelectorAll('.admin-pane').forEach(pane=>pane.classList.toggle('active', pane.id === (panes[name] || 'adminBooks')));
+  if(name === 'books') adminLoadBooks();
+  if(name === 'users') adminLoadUsers();
+  if(name === 'comments') adminLoadComments();
+  if(name === 'settings') adminLoadSettings();
+}
+function adminSplit(value){ return String(value||'').split(/[,，、]/).map(s=>s.trim()).filter(Boolean); }
+function adminJson(data){ return JSON.stringify(data, null, 2); }
+async function adminLoadBooks(){
+  if(!$('adminBookList') || !token) return;
+  const q = $('adminBookSearch')?.value?.trim();
+  const data = await api(q ? `/books?q=${encodeURIComponent(q)}&limit=80` : '/books/admin/export-json').catch(e=>({items:[], error:e.message}));
+  if(data.error){ $('adminBookList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
+  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>`<tr><td>${b.id}</td><td><b>${b.title}</b><br><span>${b.publisher||''}</span></td><td>${(b.authors||[]).join('、')}</td><td>${b.category||''}</td><td>${b.avg_rating||0}</td><td><button onclick="adminEditBook(${b.id})">编辑</button><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无图书</td></tr>'}</tbody></table>`;
+}
+async function adminEditBook(id){
+  const b = await api(`/books/${id}`);
+  $('adminBookId').value = b.id;
+  $('adminBookTitle').value = b.title || '';
+  $('adminBookAuthors').value = (b.authors||[]).join('，');
+  $('adminBookCategory').value = b.category || '';
+  $('adminBookTags').value = (b.tags||[]).join('，');
+  $('adminBookPublisher').value = b.publisher || '';
+  $('adminBookYear').value = b.publication_year || '';
+  $('adminBookCover').value = b.cover_url && !String(b.cover_url).startsWith('data:') ? b.cover_url : '';
+  $('adminBookDescription').value = b.description || '';
+  adminSwitchTab('books');
+}
+function adminResetBookForm(){ $('adminBookForm')?.reset(); if($('adminBookId')) $('adminBookId').value=''; }
+function adminBookPayload(){
+  const year = Number($('adminBookYear').value);
+  return {
+    title: $('adminBookTitle').value.trim(),
+    authors: adminSplit($('adminBookAuthors').value),
+    category: $('adminBookCategory').value.trim() || null,
+    tags: adminSplit($('adminBookTags').value),
+    publisher: $('adminBookPublisher').value.trim() || null,
+    publication_year: year || null,
+    cover_url: $('adminBookCover').value.trim() || null,
+    description: $('adminBookDescription').value.trim() || null,
+  };
+}
+async function adminSaveBook(event){
+  event?.preventDefault?.();
+  const id = $('adminBookId').value;
+  const payload = adminBookPayload();
+  if(!payload.title) return toast('请填写书名');
+  await api(id ? `/books/admin/${id}` : '/books/admin', {method:id?'PUT':'POST', body:JSON.stringify(payload)});
+  toast('图书已保存');
+  adminResetBookForm();
+  await Promise.allSettled([adminLoadBooks(), loadBooks(), loadMetrics()]);
+}
+async function adminDeleteBook(id, title){
+  if(!confirm(`确认删除《${title}》？`)) return;
+  await api(`/books/admin/${id}`, {method:'DELETE'});
+  toast('图书已删除');
+  await Promise.allSettled([adminLoadBooks(), loadBooks(), loadMetrics()]);
+}
+async function adminReindex(){ const r = await api('/books/admin/reindex-search', {method:'POST'}); toast(`已重建索引：${r.indexed || 0} 本`); }
+async function adminLoadUsers(){
+  if(!$('adminUserList') || !token) return;
+  const q = $('adminUserSearch')?.value?.trim();
+  const data = await api('/admin/users' + (q ? `?q=${encodeURIComponent(q)}` : '')).catch(e=>({items:[], error:e.message}));
+  if(data.error){ $('adminUserList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
+  $('adminUserList').innerHTML = `<table><thead><tr><th>ID</th><th>用户</th><th>邮箱</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(u=>`<tr><td>${u.id}</td><td><b>${u.nickname||u.username}</b><br><span>${u.username}</span></td><td>${u.email}</td><td>${u.is_admin?'管理员':'用户'}</td><td><span class="${u.is_active?'status-ok':'status-bad'}">${u.is_active?'启用':'禁用'}</span></td><td><button onclick="adminToggleUser(${u.id}, ${u.is_active})">${u.is_active?'禁用':'启用'}</button></td></tr>`).join('') || '<tr><td colspan="6">暂无用户</td></tr>'}</tbody></table>`;
+}
+async function adminToggleUser(id, active){ await api(`/admin/users/${id}/status`, {method:'PUT', body:JSON.stringify({is_active:!active})}); toast('用户状态已更新'); adminLoadUsers(); }
+async function adminExportUsers(){ const r=await api('/admin/users/export-csv'); await navigator.clipboard?.writeText(r.content).catch(()=>{}); toast('CSV已复制到剪贴板'); }
+async function adminLoadComments(){
+  if(!$('adminCommentList') || !token) return;
+  const qs=[]; if($('adminCommentBookId')?.value) qs.push(`book_id=${$('adminCommentBookId').value}`); if($('adminCommentUsername')?.value) qs.push(`username=${encodeURIComponent($('adminCommentUsername').value)}`);
+  const data = await api('/ecosystem/admin/comments' + (qs.length ? `?${qs.join('&')}` : '')).catch(e=>({items:[], error:e.message}));
+  if(data.error){ $('adminCommentList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
+  $('adminCommentList').innerHTML = `<table><thead><tr><th>ID</th><th>图书</th><th>用户</th><th>内容</th><th>状态</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(c=>`<tr><td>${c.id}</td><td>${c.book_title||c.book_id}</td><td>${c.nickname||c.username}<br><span>⭐ ${c.rating||'-'} · 赞 ${c.likes_count||0}</span></td><td>${c.content}</td><td><span class="${c.is_pinned?'status-ok':''}">${c.is_pinned?'置顶':'普通'}</span></td><td><button onclick="adminPinComment(${c.id})">${c.is_pinned?'取消置顶':'置顶'}</button><button class="danger-btn" onclick="adminDeleteComment(${c.id})">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无评论</td></tr>'}</tbody></table>`;
+}
+async function adminPinComment(id){ await api(`/ecosystem/admin/comments/${id}/pin`, {method:'POST'}); toast('置顶状态已更新'); adminLoadComments(); }
+async function adminDeleteComment(id){ if(!confirm('确认删除这条评论？')) return; await api(`/ecosystem/admin/comments/${id}`, {method:'DELETE'}); toast('评论已删除'); await Promise.allSettled([adminLoadComments(), loadMetrics()]); }
+async function adminLoadSettings(){
+  if(!$('adminConfigList') || !token) return;
+  const [weights, configs] = await Promise.all([api('/recommend/admin/weights').catch(()=>null), api('/admin/configs').catch(()=>({items:[]}))]);
+  if(weights){ $('adminWeightKg').value=weights.kg; $('adminWeightCf').value=weights.cf; $('adminWeightHot').value=weights.hot; $('adminWeightNew').value=weights.new; }
+  $('adminConfigList').innerHTML = `<table><thead><tr><th>键</th><th>值</th><th>说明</th></tr></thead><tbody>${(configs.items||[]).map(c=>`<tr onclick="adminFillConfig('${attr(c.key)}','${attr(c.value)}','${attr(c.description||'')}')"><td>${c.key}</td><td>${c.value}</td><td>${c.description||''}</td></tr>`).join('') || '<tr><td colspan="3">暂无配置</td></tr>'}</tbody></table>`;
+}
+function adminFillConfig(key, value, desc){ $('adminConfigKey').value=key; $('adminConfigValue').value=value; $('adminConfigDesc').value=desc; }
+async function adminSaveWeights(){
+  const payload = {kg:Number($('adminWeightKg').value), cf:Number($('adminWeightCf').value), hot:Number($('adminWeightHot').value), new:Number($('adminWeightNew').value)};
+  await api('/recommend/admin/weights', {method:'PUT', body:JSON.stringify(payload)});
+  toast('推荐权重已保存');
+}
+async function adminPrecomputeItemCf(){ const r=await api('/recommend/admin/precompute-itemcf', {method:'POST'}); toast(r.message || 'ItemCF已预计算'); }
+async function adminSaveConfig(){
+  const key=$('adminConfigKey').value.trim(); if(!key) return toast('请填写配置键');
+  await api('/admin/configs', {method:'PUT', body:JSON.stringify({key, value:$('adminConfigValue').value, description:$('adminConfigDesc').value})});
+  toast('配置已保存'); adminLoadSettings();
+}
+async function adminGraphInit(){ $('adminGraphResult').textContent=adminJson(await api('/graph/admin/init', {method:'POST'})); loadGraph(); }
+async function adminGraphSync(){ $('adminGraphResult').textContent=adminJson(await api('/graph/admin/sync', {method:'POST'})); loadGraph(); }
+async function adminGraphSemantic(){ $('adminGraphResult').textContent=adminJson(await api('/graph/admin/semantic/enrich', {method:'POST'})); loadGraph(); }
+async function adminCreateRelation(){
+  const payload={source_type:'Book', source_id:Number($('adminRelSource').value), relation_type:$('adminRelType').value.trim()||'SIMILAR_TO', target_type:'Book', target_id:Number($('adminRelTarget').value), weight:Number($('adminRelWeight').value||1)};
+  if(!payload.source_id || !payload.target_id) return toast('请填写源/目标图书 ID');
+  $('adminGraphResult').textContent=adminJson(await api('/graph/admin/relations', {method:'POST', body:JSON.stringify(payload)}));
+  loadGraph();
+}
+async function adminRunCypher(){
+  const cypher = $('adminCypher').value.trim(); if(!cypher) return toast('请填写 Cypher');
+  $('adminGraphResult').textContent=adminJson(await api('/graph/admin/cypher', {method:'POST', body:JSON.stringify({cypher, params:{}})}));
 }
 function openAssistant(){ $('assistant').classList.toggle('hidden'); }
 async function sendChat(){
@@ -388,6 +509,10 @@ function updateSearchbarForView(view){ if($('topSearchbar')) $('topSearchbar').s
 async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile(), loadAdmin()]); }
 
 document.querySelectorAll('.nav').forEach(btn=>btn.addEventListener('click',()=>{ document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(btn.dataset.view).classList.add('active'); setTitle(btn.textContent); updateSearchbarForView(btn.dataset.view); if(btn.dataset.view==='graph') loadGraph(); if(btn.dataset.view==='shelf') loadShelves(); if(btn.dataset.view==='profile') loadProfile(); if(btn.dataset.view==='admin') loadAdmin(); }));
+document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click',()=>{
+  adminSwitchTab(btn.dataset.adminTab);
+}));
+$('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('loginBtn').onclick=()=>login($('loginUser').value,$('loginPass').value);
 $('adminBtn').onclick=()=>login('admin','admin123');
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };

@@ -1,0 +1,8 @@
+node_modules/
+frontend-uni/node_modules/
+frontend-uni/dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.npm-cache/
+frontend-uni/.npm-cache/
