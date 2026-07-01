@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -44,6 +45,8 @@ def _get_or_create(db: Session, model, name: str):
 
 
 def _safe_float(value: Any) -> float | None:
+    if isinstance(value, str):
+        value = "".join(ch for ch in value if ch.isdigit() or ch in ".-")
     try:
         return None if value in (None, "") else float(value)
     except Exception:
@@ -51,10 +54,63 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _safe_int(value: Any) -> int | None:
+    if isinstance(value, str):
+        digits = []
+        for ch in value:
+            if ch.isdigit():
+                digits.append(ch)
+            elif digits:
+                break
+        value = "".join(digits)
     try:
         return None if value in (None, "") else int(float(value))
     except Exception:
         return None
+
+
+def _normalize_name(value: str) -> str:
+    value = (
+        value.replace("Ⅰ", "1").replace("Ⅱ", "2").replace("Ⅲ", "3")
+        .replace("Ⅳ", "4").replace("Ⅴ", "5")
+        .replace("一", "1").replace("二", "2").replace("三", "3")
+    )
+    return "".join(ch for ch in value.lower() if ch.isalnum() or "\u4e00" <= ch <= "\u9fff")
+
+
+def _reading_files() -> list[Path]:
+    folder = ROOT / "data" / "book_read"
+    if not folder.exists():
+        return []
+    return [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in {".pdf", ".epub"}]
+
+
+def _reading_url(title: str, suffixes: set[str]) -> str | None:
+    wanted = _normalize_name(title)
+    if not wanted:
+        return None
+    candidates: list[tuple[int, Path]] = []
+    for file in _reading_files():
+        stem = _normalize_name(file.stem)
+        if file.suffix.lower() not in suffixes:
+            continue
+        score = 0
+        if stem == wanted:
+            score = 100
+        elif stem.startswith(wanted):
+            score = 90
+        elif wanted.startswith(stem):
+            score = 55
+        elif wanted in stem or stem in wanted:
+            score = 50
+        elif "3体3" in wanted and "3题3" in stem:
+            score = 90
+        if score:
+            candidates.append((score - abs(len(stem) - len(wanted)), file))
+    if candidates:
+        file = sorted(candidates, key=lambda item: item[0], reverse=True)[0][1]
+        rel = file.relative_to(ROOT / "data").as_posix()
+        return "/data/" + quote(rel, safe="/")
+    return None
 
 
 def normalize_book(raw: dict[str, Any]) -> dict[str, Any]:
@@ -105,6 +161,8 @@ def upsert_book(db: Session, item: dict[str, Any]) -> Book:
     book.description = data["description"]
     book.trial_text = data["description"]
     book.cover_url = data["cover_url"]
+    book.ebook_pdf_url = _reading_url(data["title"], {".pdf"})
+    book.ebook_epub_url = _reading_url(data["title"], {".epub"})
     book.hot_score = (data["avg_rating"] or 0) * 12 + (data["rating_count"] or 0) / 10
     book.is_new = False
 

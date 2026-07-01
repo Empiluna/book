@@ -35,7 +35,7 @@ def trial(book_id: int, db: Session = Depends(get_db), user: User | None = Depen
         "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
         "pdf_url": book.ebook_pdf_url,
         "epub_url": book.ebook_epub_url,
-        "reader_url": f"/static/reader.html?book_id={book.id}",
+        "reader_url": f"/static/reader.html?book_id={book.id}&v=integrated-reader-3",
         "total_preview_pages": len(chunks),
         "pages": [{"page": i + 1, "content": c} for i, c in enumerate(chunks)],
         "reader_features": ["PDF.js预览", "EPUB.js预览", "翻页", "缩放", "目录导航", "书签", "进度保存", "夜间模式"],

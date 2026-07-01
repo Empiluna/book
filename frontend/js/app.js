@@ -188,7 +188,7 @@ async function openReader(id){
   readerStartAt = Date.now(); readerBookId = id;
   recordReadingAction(id, 'reading', 'reader');
   recordFeedback(id, 'trial', 'reader');
-  $('readerContent').innerHTML = `<h2>${data.book.title} · 在线试读</h2><p class="meta">当前权限：${data.logged_in?'已登录10页':'未登录3页'} · ${data.content_type.toUpperCase()} · 支持 PDF.js / EPUB.js / 翻页 / 缩放 / 目录 / 进度保存</p><iframe src="${data.reader_url}" class="reader-frame"></iframe><div class="reader-tools"><button onclick="window.open('${data.reader_url}','_blank')">独立阅读器打开</button><button onclick="saveProgress(${id},25)">保存25%</button><button onclick="saveProgress(${id},100)">标记读完</button></div>`;
+  $('readerContent').innerHTML = `<iframe src="${data.reader_url}" class="reader-frame" title="${data.book.title} 在线试读"></iframe>`;
   $('readerModal').classList.remove('hidden');
 }
 function closeReader(){ $('readerModal').classList.add('hidden'); }

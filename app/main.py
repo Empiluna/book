@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,9 @@ from app.services.seed import seed_database
 import app.models  # noqa: F401
 
 settings = get_settings()
+mimetypes.add_type("application/epub+zip", ".epub")
+mimetypes.add_type("application/pdf", ".pdf")
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.1.0-complete-five-fixes",
@@ -36,6 +40,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
+DATA_DIR = ROOT / "data"
+if DATA_DIR.exists():
+    app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
 
 
 @app.on_event("startup")
