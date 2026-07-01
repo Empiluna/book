@@ -93,8 +93,10 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { request } from '../api/request'
+import { requireAdminPage } from '../utils/admin'
 
 const q = ref('')
 const books = ref([])
@@ -358,7 +360,7 @@ async function reindex() {
   }
 }
 
-onMounted(load)
+onShow(() => { if (requireAdminPage()) load() })
 </script>
 
 <style scoped>

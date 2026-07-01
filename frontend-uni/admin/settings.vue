@@ -36,8 +36,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { request } from '../api/request'
+import { requireAdminPage } from '../utils/admin'
 
 const configs = ref([])
 const weights = ref({ kg: '0.4', cf: '0.4', hot: '0.1', new: '0.1' })
@@ -94,7 +96,7 @@ async function saveConfig(c) {
   }
 }
 
-onMounted(load)
+onShow(() => { if (requireAdminPage()) load() })
 </script>
 
 <style scoped>

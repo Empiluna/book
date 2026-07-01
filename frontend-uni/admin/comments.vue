@@ -30,8 +30,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { request } from '../api/request'
+import { requireAdminPage } from '../utils/admin'
 
 const comments = ref([])
 const bookId = ref('')
@@ -75,7 +77,7 @@ function remove(c) {
   })
 }
 
-onMounted(load)
+onShow(() => { if (requireAdminPage()) load() })
 </script>
 
 <style scoped>

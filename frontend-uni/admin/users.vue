@@ -27,8 +27,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { request } from '../api/request'
+import { requireAdminPage } from '../utils/admin'
 
 const q = ref('')
 const users = ref([])
@@ -62,7 +64,7 @@ async function exportCsv() {
   }
 }
 
-onMounted(load)
+onShow(() => { if (requireAdminPage()) load() })
 </script>
 
 <style scoped>

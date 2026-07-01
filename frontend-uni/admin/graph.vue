@@ -40,8 +40,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { request } from '../api/request'
+import { requireAdminPage } from '../utils/admin'
 
 const stats = ref({})
 const cypher = ref('MATCH (n) RETURN n LIMIT 10')
@@ -114,7 +116,7 @@ async function createRelation() {
   }
 }
 
-onMounted(load)
+onShow(() => { if (requireAdminPage()) load() })
 </script>
 
 <style scoped>

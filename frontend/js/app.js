@@ -18,7 +18,16 @@ async function api(path, opts={}){
 function $(id){ return document.getElementById(id); }
 function setTitle(t){ $('pageTitle').textContent = t; }
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),2600); }
-function updateUserBadge(){ $('userBadge').textContent = currentUser ? `${currentUser.nickname || currentUser.username}${currentUser.is_admin ? ' · 管理员' : ''}` : '未登录'; }
+function isAdmin(){ return !!(currentUser && currentUser.is_admin); }
+function updateAdminVisibility(){
+  const adminNav = document.querySelector('[data-view="admin"]');
+  if(adminNav) adminNav.classList.toggle('hidden', !isAdmin());
+  if(!isAdmin() && $('admin')?.classList.contains('active')) activateView('home');
+}
+function updateUserBadge(){
+  $('userBadge').textContent = currentUser ? `${currentUser.nickname || currentUser.username}${currentUser.is_admin ? ' · 管理员' : ''}` : '未登录';
+  updateAdminVisibility();
+}
 function attr(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function stat(label, value){ return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
 function isInShelf(bookId, shelf){ return !!(shelfState[bookId] && shelfState[bookId][shelf]); }
@@ -75,11 +84,12 @@ function purchaseChannelsHtml(book, purchase){
 }
 function recordPurchaseClick(bookId, platform){ fetch(`${API}/ecosystem/purchase-click/${bookId}?channel=${encodeURIComponent(platform)}`, {method:'POST', headers:headers()}).catch(()=>{}); }
 
-async function login(user='demo', pass='demo123'){
+async function login(user='demo', pass='demo123', openAdmin=false){
   const data = await api('/user/login', {method:'POST', body: JSON.stringify({account:user, username_or_email:user, password:pass})});
   token = data.access_token; currentUser = data.user;
   localStorage.setItem('token', token); localStorage.setItem('user', JSON.stringify(currentUser));
   updateUserBadge(); toast('登录成功'); await loadAll();
+  if(openAdmin && isAdmin()) activateView('admin');
 }
 async function loadMetrics(){
   const dash = token ? await api('/admin/dashboard').catch(()=>null) : null;
@@ -372,7 +382,7 @@ function drawTrend(rows){
   });
 }
 async function loadAdmin(){
-  if(!token){
+  if(!token || !isAdmin()){
     $('adminStats').innerHTML='<p class="meta">请先以管理员登录。</p>';
     $('adminGraphStats').innerHTML='';
     ['adminBookList','adminUserList','adminCommentList','adminConfigList','adminGraphResult'].forEach(id=>{ if($(id)) $(id).innerHTML = ''; });
@@ -596,13 +606,31 @@ async function sendChat(){
 function updateSearchbarForView(view){ if($('topSearchbar')) $('topSearchbar').style.display = ['home','discover'].includes(view) ? 'flex' : 'none'; }
 async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile(), loadAdmin()]); }
 
-document.querySelectorAll('.nav').forEach(btn=>btn.addEventListener('click',()=>{ document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(btn.dataset.view).classList.add('active'); setTitle(btn.textContent); updateSearchbarForView(btn.dataset.view); if(btn.dataset.view==='graph') loadGraph(); if(btn.dataset.view==='shelf') loadShelves(); if(btn.dataset.view==='profile') loadProfile(); if(btn.dataset.view==='admin') loadAdmin(); }));
+function activateView(view){
+  if(view === 'admin' && !isAdmin()){
+    toast('请使用管理员账号登录');
+    view = 'home';
+  }
+  const btn = document.querySelector(`[data-view="${view}"]`);
+  document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));
+  btn?.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  $(view)?.classList.add('active');
+  setTitle(btn?.textContent || '首页');
+  updateSearchbarForView(view);
+  if(view==='graph') loadGraph();
+  if(view==='shelf') loadShelves();
+  if(view==='profile') loadProfile();
+  if(view==='admin') loadAdmin();
+}
+
+document.querySelectorAll('.nav').forEach(btn=>btn.addEventListener('click',()=>activateView(btn.dataset.view)));
 document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click',()=>{
   adminSwitchTab(btn.dataset.adminTab);
 }));
 $('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('loginBtn').onclick=()=>login($('loginUser').value,$('loginPass').value);
-$('adminBtn').onclick=()=>login('admin','admin123');
+$('adminBtn').onclick=()=>login('admin','admin123', true);
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 updateUserBadge(); updateSearchbarForView('home'); loadAll();

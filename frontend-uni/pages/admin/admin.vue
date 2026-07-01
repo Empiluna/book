@@ -35,9 +35,15 @@
 </template>
 
 <script setup>
+import { onShow } from '@dcloudio/uni-app'
+import { requireAdminPage } from '../../utils/admin'
+
 function go(url) {
+  if (!requireAdminPage()) return
   uni.navigateTo({ url })
 }
+
+onShow(requireAdminPage)
 </script>
 
 <style scoped>
