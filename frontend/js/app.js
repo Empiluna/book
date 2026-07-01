@@ -189,7 +189,7 @@ function reviewCardHtml(c, bookId){
     <p>${attr(c.content || '')}</p>
     <div class="review-actions">
       <button class="ghost ${c.liked?'active':''}" onclick="likeComment(${c.id}, ${bookId})">❤ ${c.likes_count||0}</button>
-      ${mine || isAdmin() ? `<button class="ghost" onclick="editComment(${c.id}, ${bookId}, '${attr(c.content)}', '${c.rating||''}')">编辑</button><button class="ghost danger" onclick="deleteComment(${c.id}, ${bookId})">删除</button>` : ''}
+      ${mine || isAdmin() ? `<button class="ghost" onclick="editComment(${c.id}, ${bookId}, '${attr(c.content)}', '${c.rating||''}')">编辑</button>` : ''}${isAdmin() ? `<button class="ghost danger" onclick="deleteComment(${c.id}, ${bookId})">删除</button>` : ''}
     </div>
   </article>`;
 }
@@ -206,7 +206,7 @@ async function openDetail(id){
   const sim = await api(`/recommend/similar/${id}?limit=6`).catch(()=>({items:[]}));
   const comments = await api(`/ecosystem/comments/${id}`).catch(()=>({items:[]}));
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
-  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · ⭐ ${b.avg_rating} (${b.rating_count}人评分)</p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}${shelfButton(b.id,'在读')}<button onclick="rateBook(${b.id})">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
+  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}${shelfButton(b.id,'在读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
   $('detailModal').classList.remove('hidden');
 }
 function closeDetail(){ $('detailModal').classList.add('hidden'); }
@@ -244,7 +244,7 @@ async function toggleShelf(event, id, shelf){
   await Promise.allSettled([loadShelves(), loadProfile(), loadHistory()]);
 }
 async function addShelf(id, shelf){ return toggleShelf(null, id, shelf); }
-async function rateBook(id){ if(!token) return toast('请先登录'); const rating=Number(prompt('请输入评分 0.5-5.0','5')); if(!rating) return; await api(`/user/rating/${id}`, {method:'POST', body:JSON.stringify({rating})}); toast('评分已保存'); openDetail(id); loadProfile(); }
+function scrollToReviews(){ const el=document.querySelector('#detailContent .reviews-section'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
 async function submitReview(id){
   if(!token) return toast('请先登录');
   const content = $('reviewContent')?.value.trim();

@@ -25,13 +25,12 @@ def trial(book_id: int, db: Session = Depends(get_db), user: User | None = Depen
     if user:
         db.add(RecommendationFeedback(user_id=user.id, book_id=book_id, event_type="trial", source="trial_reader"))
     db.commit()
-    allowed_pages = settings.TRIAL_PAGES_LOGIN if user else settings.TRIAL_PAGES_ANONYMOUS
     text = book.trial_text or book.description or "暂无试读内容。"
-    chunks = [text[i:i + 560] for i in range(0, min(len(text), allowed_pages * 560), 560)] or ["暂无试读内容。"]
+    chunks = [text[i:i + 560] for i in range(0, len(text), 560)] or ["暂无试读内容。"]
     return {
         "book": book_card(book),
         "logged_in": bool(user),
-        "allowed_pages": allowed_pages,
+        "allowed_pages": len(chunks),
         "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
         "pdf_url": book.ebook_pdf_url,
         "epub_url": book.ebook_epub_url,

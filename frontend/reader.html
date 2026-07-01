@@ -52,7 +52,7 @@
     function headers(){return token?{'Authorization':'Bearer '+token,'Content-Type':'application/json'}:{'Content-Type':'application/json'}}
     async function api(path,opts={}){const r=await fetch(API+path,{headers:headers(),...opts}); if(!r.ok) throw new Error(await r.text()); return r.json()}
     function absUrl(url){return new URL(url, location.origin).href}
-    function allowed(){return Math.max(1, trial?.allowed_pages||1)}
+    function allowed(){return Math.max(1, trial?.allowed_pages||99999)}
     function progress(){return Math.min(100,Math.max(1,Math.round(page/pageTotal*100)))}
     function updateUi(){
       $('pageInput').value=page;
@@ -81,7 +81,7 @@
       const pdfjsLib=await import('/static/vendor/pdf.min.mjs?v=4.10.38');
       pdfjsLib.GlobalWorkerOptions.workerSrc='/static/vendor/pdf.worker.min.mjs?v=4.10.38';
       pdfDoc=await pdfjsLib.getDocument({url:pdfUrl}).promise;
-      pageTotal=Math.min(pdfDoc.numPages,allowed());
+      pageTotal=pdfDoc.numPages;
       await new Promise(requestAnimationFrame);
       await renderPdf();
     }
@@ -108,7 +108,7 @@
       updateUi();
     }
     async function loadEpub(url){
-      mode='epub'; page=1; pageTotal=allowed();
+      mode='epub'; page=1; pageTotal=9999;
       $('stage').innerHTML='<div id="epub" class="epubbox"><div class="hint">EPUB 加载中...</div></div>';
       const res=await fetch(absUrl(url)); if(!res.ok) throw new Error('EPUB文件读取失败：'+res.status);
       epubBook=ePub(await res.arrayBuffer(),{openAs:'binary'});

@@ -115,8 +115,8 @@
 
   </main>
 
-  <div id="detailModal" class="modal hidden"><div class="modal-card"><button class="close" onclick="closeDetail()">×</button><div id="detailContent"></div></div></div>
-  <div id="readerModal" class="modal hidden"><div class="reader-card"><button class="close" onclick="closeReader()">×</button><div id="readerContent"></div></div></div>
+  <div id="detailModal" class="modal hidden"><div class="modal-card"><div class="modal-close-wrap"><button class="close" onclick="closeDetail()">×</button></div><div id="detailContent"></div></div></div>
+  <div id="readerModal" class="modal hidden"><div class="reader-card"><div class="modal-close-wrap"><button class="close" onclick="closeReader()">×</button></div><div id="readerContent"></div></div></div>
   <div id="assistant" class="assistant hidden"><div class="assistant-head"><b>智能问答助手</b><button onclick="openAssistant()">×</button></div><div id="chatBox" class="chat-box"></div><div class="chat-input"><input id="chatInput" placeholder="例如：推荐几本人工智能入门书"><button onclick="sendChat()">发送</button></div></div>
 
   <script src="/static/js/app.js?v=reviews-covers-1"></script>
