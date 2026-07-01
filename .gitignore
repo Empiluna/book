@@ -1,6 +1,10 @@
 node_modules/
 frontend-uni/node_modules/
 frontend-uni/dist/
+.venv/
+run.log
+run.err.log
+run-*.log
 __pycache__/
 *.py[cod]
 .pytest_cache/

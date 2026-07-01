@@ -1,6 +1,8 @@
 const API = '/api/v1';
 let token = localStorage.getItem('token') || '';
 let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+let lastAdminDashboard = null;
+let lastAdminGraphStats = null;
 
 function $(id){ return document.getElementById(id); }
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
@@ -11,6 +13,48 @@ function html(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/
 function stat(label, value){ return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
 function adminSplit(value){ return String(value||'').split(/[,，、]/).map(x=>x.trim()).filter(Boolean); }
 function adminJson(data){ return JSON.stringify(data, null, 2); }
+const adminMetricLabels = {books:'图书', users:'用户', comments:'评论', ratings:'评分', bookmarks:'收藏', searches:'搜索', chat_messages:'问答', purchase_clicks:'购书点击', nodes:'节点', relationships:'关系', semantic_nodes:'语义节点'};
+
+function topObjectEntries(obj, limit=8){
+  return Object.entries(obj || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0, limit).map(([name,count])=>({name, count}));
+}
+
+function buildAdminAssistantContext(){
+  const dash = lastAdminDashboard || {};
+  const graph = lastAdminGraphStats || {};
+  return {
+    cards: dash.cards || {},
+    graph_stats: graph,
+    category_distribution: topObjectEntries(dash.category_distribution, 10),
+    rating_distribution: dash.rating_distribution || {},
+    user_status: dash.user_status || {},
+    activity_7d: (dash.activity || []).map(x=>({
+      date: x.date,
+      new_users: x.users || 0,
+      comments: x.comments || 0,
+      ratings: x.ratings || 0,
+      searches: x.searches || 0,
+      reads: x.reads || 0,
+    })),
+    hot_books: (dash.hot_books || []).slice(0, 5).map(b=>({
+      title: b.title,
+      authors: b.authors || [],
+      category: b.category,
+      rating: b.avg_rating,
+      hot_score: b.hot_score,
+      views: b.view_count,
+    })),
+    top_keywords: dash.top_keywords || [],
+    cache: dash.cache || {},
+  };
+}
+
+async function ensureAdminAssistantContext(){
+  if(lastAdminDashboard) return;
+  const [dash, graph] = await Promise.all([api('/admin/dashboard'), api('/graph/stats').catch(()=>null)]);
+  lastAdminDashboard = dash;
+  lastAdminGraphStats = graph;
+}
 
 async function api(path, opts={}){
   const res = await fetch(API + path, {headers: headers(), ...opts});
@@ -96,7 +140,9 @@ async function sendAdminChat(){
   box.innerHTML += `<div class="bubble user">${html(message)}</div>`;
   box.scrollTop = box.scrollHeight;
   try{
-    const prompt = `请以管理员助手身份回答，重点关注图书管理、用户运营、评论审核、推荐策略、知识图谱和系统配置。管理员问题：${message}`;
+    await ensureAdminAssistantContext();
+    const context = JSON.stringify(buildAdminAssistantContext());
+    const prompt = `请以管理员助手身份回答。你可以使用以下后台实时数据作为分析依据，数据是JSON：${context}\n回答要求：优先基于数据给出结论、异常点和可执行建议；如果问题与数据无关，再按图书管理、用户运营、评论审核、推荐策略、知识图谱和系统配置经验回答。\n管理员问题：${message}`;
     const data = await api('/chat/send', {method:'POST', body:JSON.stringify({message:prompt})});
     const books = (data.books || []).slice(0, 3).map(b=>`<div class="mini-item"><b>${html(b.title)}</b><span>${html(b.reason || b.category || '')}</span></div>`).join('');
     box.innerHTML += `<div class="bubble">${html(data.answer || '我暂时没有得到有效回复。')}${books}</div>`;
@@ -109,9 +155,107 @@ async function sendAdminChat(){
 async function loadAdmin(){
   if(!await requireAdmin()) return;
   const [dash, gs] = await Promise.all([api('/admin/dashboard'), api('/graph/stats').catch(()=>null)]);
-  $('adminStats').innerHTML = Object.entries(dash.cards || {}).map(([k,v])=>stat(k,v)).join('');
-  $('adminGraphStats').innerHTML = gs ? Object.entries(gs).filter(([,v])=>typeof v === 'number').map(([k,v])=>stat(k,v)).join('') : '';
+  lastAdminDashboard = dash;
+  lastAdminGraphStats = gs;
+  $('adminStats').innerHTML = Object.entries(dash.cards || {}).map(([k,v])=>stat(adminMetricLabels[k] || k, v)).join('');
+  $('adminGraphStats').innerHTML = gs ? Object.entries(gs).filter(([,v])=>typeof v === 'number').map(([k,v])=>stat(adminMetricLabels[k] || k, v)).join('') : '';
+  renderAdminInsights(dash);
   await Promise.allSettled([adminLoadBooks(), adminLoadUsers(), adminLoadComments(), adminLoadSettings()]);
+}
+
+function renderBars(id, entries, options={}){
+  const target = $(id);
+  if(!target) return;
+  const rows = Array.isArray(entries) ? entries : Object.entries(entries || {}).map(([label,value])=>({label, value}));
+  const clean = rows.map(x=>({label: x.label ?? x.keyword ?? x[0], value: Number(x.value ?? x.count ?? x[1] ?? 0)})).filter(x=>x.label);
+  const max = Math.max(1, ...clean.map(x=>x.value));
+  target.innerHTML = clean.slice(0, options.limit || 8).map(x=>`
+    <div class="admin-bar-row">
+      <span>${html(x.label)}</span>
+      <div class="admin-bar-track"><i style="width:${Math.max(4, x.value / max * 100)}%"></i></div>
+      <b>${x.value}</b>
+    </div>
+  `).join('') || '<p class="meta">暂无数据</p>';
+}
+
+function renderActivity(activity){
+  const target = $('adminActivityChart');
+  if(!target) return;
+  const rows = activity || [];
+  const max = Math.max(1, ...rows.flatMap(x=>[x.users||0, x.comments||0, x.ratings||0, x.searches||0, x.reads||0]));
+  target.innerHTML = `
+    <div class="admin-line-legend">
+      <span><i class="tone-a"></i>用户</span><span><i class="tone-b"></i>评论</span><span><i class="tone-c"></i>评分</span><span><i class="tone-d"></i>搜索</span><span><i class="tone-e"></i>阅读</span>
+    </div>
+    <div class="admin-line-grid">
+      ${rows.map(day=>`
+        <div class="admin-line-day">
+          <div class="admin-line-stack">
+            <i class="tone-a" style="height:${Math.max(3, (day.users||0)/max*100)}%"></i>
+            <i class="tone-b" style="height:${Math.max(3, (day.comments||0)/max*100)}%"></i>
+            <i class="tone-c" style="height:${Math.max(3, (day.ratings||0)/max*100)}%"></i>
+            <i class="tone-d" style="height:${Math.max(3, (day.searches||0)/max*100)}%"></i>
+            <i class="tone-e" style="height:${Math.max(3, (day.reads||0)/max*100)}%"></i>
+          </div>
+          <span>${html(day.date)}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderUserDonut(status){
+  const target = $('adminUserChart');
+  if(!target) return;
+  const active = Number(status?.active || 0);
+  const disabled = Number(status?.disabled || 0);
+  const admins = Number(status?.admins || 0);
+  const members = Number(status?.members || 0);
+  const total = Math.max(1, active + disabled);
+  const activeDeg = active / total * 360;
+  target.innerHTML = `
+    <div class="admin-donut" style="background:conic-gradient(#10b981 0 ${activeDeg}deg,#ef4444 ${activeDeg}deg 360deg)"><b>${active + disabled}</b><span>用户</span></div>
+    <div class="admin-status-list">
+      <div><span>启用用户</span><b>${active}</b></div>
+      <div><span>禁用用户</span><b>${disabled}</b></div>
+      <div><span>管理员</span><b>${admins}</b></div>
+      <div><span>普通用户</span><b>${members}</b></div>
+    </div>
+  `;
+}
+
+function renderHotBooks(items){
+  const target = $('adminHotBooks');
+  if(!target) return;
+  target.innerHTML = (items || []).slice(0, 5).map((b, index)=>`
+    <div class="admin-rank-row">
+      <em>${index + 1}</em>
+      <span><b>${html(b.title)}</b><small>${html((b.authors||[]).join('、') || b.category || '暂无作者')}</small></span>
+      <strong>${Number(b.hot_score || b.view_count || 0).toFixed(1)}</strong>
+    </div>
+  `).join('') || '<p class="meta">暂无数据</p>';
+}
+
+function renderChips(id, rows){
+  const target = $(id);
+  if(!target) return;
+  target.innerHTML = (rows || []).map(x=>`<span>${html(x.keyword)} <b>${x.count}</b></span>`).join('') || '<p class="meta">暂无热搜</p>';
+}
+
+function renderStatus(id, status){
+  const target = $(id);
+  if(!target) return;
+  target.innerHTML = Object.entries(status || {}).map(([k,v])=>`<div><span>${html(k)}</span><b>${html(typeof v === 'object' ? JSON.stringify(v) : v)}</b></div>`).join('') || '<p class="meta">暂无状态</p>';
+}
+
+function renderAdminInsights(dash){
+  renderBars('adminCategoryChart', dash.category_distribution, {limit: 8});
+  renderBars('adminRatingChart', dash.rating_distribution);
+  renderActivity(dash.activity);
+  renderUserDonut(dash.user_status);
+  renderHotBooks(dash.hot_books);
+  renderChips('adminKeywordChart', dash.top_keywords);
+  renderStatus('adminCacheStatus', dash.cache);
 }
 
 function adminSwitchTab(tab){

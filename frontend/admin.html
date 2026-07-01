@@ -35,6 +35,42 @@
         <div class="panel glass"><h3>运营总览</h3><div id="adminStats" class="stats-cards"></div></div>
         <div class="panel glass"><h3>图谱统计</h3><div id="adminGraphStats" class="stats-cards"></div></div>
         <div class="panel glass wide">
+          <div class="section-title compact">
+            <h3>运营分析</h3>
+            <span>图书、用户、互动和搜索数据概览</span>
+          </div>
+          <div class="admin-insight-grid">
+            <div class="admin-chart-card">
+              <h4>分类分布</h4>
+              <div id="adminCategoryChart" class="admin-bars"></div>
+            </div>
+            <div class="admin-chart-card">
+              <h4>评分区间</h4>
+              <div id="adminRatingChart" class="admin-bars"></div>
+            </div>
+            <div class="admin-chart-card wide-chart">
+              <h4>近 7 日活跃趋势</h4>
+              <div id="adminActivityChart" class="admin-line-chart"></div>
+            </div>
+            <div class="admin-chart-card">
+              <h4>用户结构</h4>
+              <div id="adminUserChart" class="admin-donut-wrap"></div>
+            </div>
+            <div class="admin-chart-card">
+              <h4>热门图书 Top 5</h4>
+              <div id="adminHotBooks" class="admin-rank-list"></div>
+            </div>
+            <div class="admin-chart-card">
+              <h4>热搜关键词</h4>
+              <div id="adminKeywordChart" class="admin-chip-list"></div>
+            </div>
+            <div class="admin-chart-card">
+              <h4>缓存状态</h4>
+              <div id="adminCacheStatus" class="admin-status-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel glass wide">
           <div class="admin-tabs">
             <button class="admin-tab active" data-admin-tab="books">图书</button>
             <button class="admin-tab" data-admin-tab="users">用户</button>
