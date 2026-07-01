@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     SECRET_KEY: str = "book-system-dev-secret-change-me"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
-    DATABASE_URL: str = "sqlite:///./book_system.db"
+    DATABASE_URL: str = "mysql+pymysql://root:root123456@localhost:3306/book_system?charset=utf8mb4"
     CORS_ORIGINS: str = "*"
     SEED_ON_STARTUP: bool = True
 

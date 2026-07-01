@@ -79,7 +79,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 docker compose up -d
 ```
 
-包括 MySQL、Neo4j、Redis、ElasticSearch。默认情况下项目可用 SQLite + 内存缓存 + SQL fallback 直接演示；配置 `.env` 后可切换至完整基础设施。
+包括 MySQL、Neo4j、Redis、ElasticSearch。默认情况下主业务数据库使用 MySQL；Neo4j、Redis、ElasticSearch 未配置时仍会使用内存缓存和 SQL fallback 降级运行。测试环境可临时使用 SQLite。
 
 ## 5. 测试
 
