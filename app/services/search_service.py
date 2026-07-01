@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Any
@@ -9,9 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Author, Book, Publisher, SearchLog, Tag, User
+from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card
 
 settings = get_settings()
+
+SEMANTIC_MIN_SCORE = 0.20
+HYBRID_MIN_SCORE = 0.10
 
 
 def _book_document(book: Book) -> dict[str, Any]:
@@ -36,11 +39,12 @@ def _book_document(book: Book) -> dict[str, Any]:
 
 
 class SearchService:
-    """ElasticSearch-first book search with explicit SQL fallback.
+    """Book search service.
 
-    When REQUIRE_ELASTICSEARCH=true, missing ES connection becomes an error. This lets the project
-    run in a strict document-aligned mode for acceptance checks, while still supporting classroom
-    local startup when the flag is false.
+    Supports three modes:
+    - keyword: ElasticSearch BM25 first, SQL fallback when ES is unavailable.
+    - semantic: local embedding-style vector retrieval.
+    - hybrid: keyword retrieval + semantic retrieval + quality score fusion.
     """
 
     def __init__(self, db: Session):
@@ -82,8 +86,6 @@ class SearchService:
                         }
                     },
                     "analyzer": {
-                        # Built-in n-gram Chinese analyzer. It avoids external IK plugin dependency while
-                        # still supporting Chinese partial matching over title/author/tag/description.
                         "cn_text": {
                             "type": "custom",
                             "tokenizer": "cn_ngram_tokenizer",
@@ -139,19 +141,144 @@ class SearchService:
         self.client.indices.refresh(index=self.index_name)
         return {"backend": "elasticsearch", "indexed": len(books), "index": self.index_name}
 
-    def search(self, q: str | None, category: str | None = None, tag: str | None = None, author: str | None = None, sort: str = "hot", page: int = 1, limit: int = 24, user: User | None = None) -> dict:
-        if q and self.client:
+    def search(
+        self,
+        q: str | None,
+        category: str | None = None,
+        tag: str | None = None,
+        author: str | None = None,
+        sort: str = "hot",
+        page: int = 1,
+        limit: int = 24,
+        user: User | None = None,
+        mode: str = "hybrid",
+    ) -> dict:
+        mode = (mode or "hybrid").lower()
+        if mode not in {"hybrid", "semantic", "keyword"}:
+            raise HTTPException(400, "mode 只能为 hybrid / semantic / keyword")
+        if not q:
+            return self._search_sql(q, category, tag, author, sort, page, limit, user)
+        if mode == "semantic":
+            return self.semantic_search(q, category, tag, author, sort, page, limit, user)
+        if mode == "hybrid":
+            return self.hybrid_search(q, category, tag, author, sort, page, limit, user)
+        if self.client:
             return self._search_es(q, category, tag, author, sort, page, limit, user)
-        if q and settings.REQUIRE_ELASTICSEARCH and not self.client:
+        if settings.REQUIRE_ELASTICSEARCH:
             raise HTTPException(503, "严格模式要求使用 ElasticSearch，但当前未连接")
         return self._search_sql(q, category, tag, author, sort, page, limit, user)
+
+    def semantic_search(self, q: str, category: str | None = None, tag: str | None = None, author: str | None = None, sort: str = "relevance", page: int = 1, limit: int = 24, user: User | None = None) -> dict:
+        books = self._candidate_books(category, tag, author)
+        ranked = EmbeddingService.rank_books(
+            q,
+            books,
+            limit=max(page * limit, 80),
+            min_score=SEMANTIC_MIN_SCORE,
+        )
+        if sort == "rating":
+            ranked.sort(key=lambda x: (x[1], x[0].avg_rating or 0), reverse=True)
+        elif sort == "new":
+            ranked.sort(key=lambda x: (x[1], x[0].is_new, x[0].created_at), reverse=True)
+        total = len(ranked)
+        start = (page - 1) * limit
+        items = []
+        for book, score in ranked[start:start + limit]:
+            card = book_card(book, score=score, reason="根据查询语义与图书标题、简介、标签、作者等内容的向量相似度匹配。", source="semantic")
+            card["semantic_score"] = score
+            items.append(card)
+        self._record(q, total, user)
+        return {"items": items, "total": total, "page": page, "limit": limit, "search_backend": "semantic-vector", "embedding_backend": "local-hashing-vector"}
+
+    def hybrid_search(self, q: str, category: str | None = None, tag: str | None = None, author: str | None = None, sort: str = "hot", page: int = 1, limit: int = 24, user: User | None = None) -> dict:
+        pool_size = max(80, limit * 4)
+        keyword_payload = self._search_es(q, category, tag, author, sort="relevance", page=1, limit=pool_size, user=user, record=False) if self.client else self._search_sql(q, category, tag, author, sort="relevance", page=1, limit=pool_size, user=user, record=False)
+        semantic_books = self._candidate_books(category, tag, author)
+        semantic_ranked = EmbeddingService.rank_books(
+            q,
+            semantic_books,
+            limit=pool_size,
+            min_score=SEMANTIC_MIN_SCORE,
+        )
+        semantic_payload = {
+            "items": [
+                {
+                    **book_card(
+                        book,
+                        score=score,
+                        reason="根据查询语义与图书标题、简介、标签、作者等内容的向量相似度匹配。",
+                        source="semantic",
+                    ),
+                    "semantic_score": score,
+                }
+                for book, score in semantic_ranked
+            ],
+            "total": len(semantic_ranked),
+            "search_backend": "semantic-vector",
+        }
+
+        merged: dict[int, dict[str, Any]] = {}
+        max_keyword = max([float(x.get("keyword_score") or 0.0) for x in keyword_payload.get("items", [])] or [1.0]) or 1.0
+
+        def quality_score(card: dict[str, Any]) -> float:
+            rating = float(card.get("avg_rating") or 0.0) / 5.0
+            hot = float(card.get("hot_score") or 0.0)
+            hot_norm = hot / (1.0 + abs(hot)) if hot else 0.0
+            new_boost = 0.05 if card.get("is_new") else 0.0
+            return min(1.0, rating * 0.65 + hot_norm * 0.30 + new_boost)
+
+        for card in keyword_payload.get("items", []):
+            bid = int(card["id"])
+            raw = float(card.get("keyword_score") or 0.0)
+            row = merged.setdefault(bid, {"card": card, "keyword_norm": 0.0, "semantic_score": 0.0})
+            row["keyword_norm"] = max(row["keyword_norm"], raw / max_keyword)
+
+        for card in semantic_payload.get("items", []):
+            bid = int(card["id"])
+            row = merged.setdefault(bid, {"card": card, "keyword_norm": 0.0, "semantic_score": 0.0})
+            row["semantic_score"] = max(row["semantic_score"], float(card.get("semantic_score") or card.get("score") or 0.0))
+
+        ranked = []
+        for row in merged.values():
+            card = row["card"]
+            q_score = quality_score(card)
+            final = 0.58 * row["keyword_norm"] + 0.37 * row["semantic_score"] + 0.05 * q_score
+
+            keyword_hit = row["keyword_norm"] > 0
+            semantic_hit = row["semantic_score"] >= SEMANTIC_MIN_SCORE
+            if not (keyword_hit or semantic_hit):
+                continue
+            if not keyword_hit and final < HYBRID_MIN_SCORE:
+                continue
+
+            card["score"] = round(final, 4)
+            card["keyword_score_norm"] = round(row["keyword_norm"], 4)
+            card["semantic_score"] = round(row["semantic_score"], 4)
+            card["quality_score"] = round(q_score, 4)
+            card["source"] = "hybrid"
+            card["reason"] = "融合关键词 BM25/SQL 匹配、语义向量相似度和图书质量分生成排序。"
+            ranked.append(card)
+        ranked.sort(key=lambda x: x.get("score") or 0.0, reverse=True)
+        total = len(ranked)
+        start = (page - 1) * limit
+        self._record(q, total, user)
+        return {
+            "items": ranked[start:start + limit],
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "search_backend": "hybrid-bm25-vector",
+            "lexical_backend": keyword_payload.get("search_backend"),
+            "embedding_backend": "local-hashing-vector",
+            "fusion_weights": {"keyword_bm25": 0.58, "semantic_vector": 0.37, "quality": 0.05},
+        }
 
     def _record(self, keyword: str | None, total: int, user: User | None) -> None:
         if keyword:
             self.db.add(SearchLog(user_id=user.id if user else None, keyword=keyword, result_count=total))
             self.db.commit()
 
-    def _search_es(self, q: str, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None) -> dict:
+    def _search_es(self, q: str, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None, record: bool = True) -> dict:
         self.ensure_index()
         filters = []
         if category:
@@ -185,14 +312,22 @@ class SearchService:
             body["sort"] = [{"hot_score": "desc"}, {"_score": "desc"}]
         resp = self.client.search(index=self.index_name, **body)
         hits = resp.get("hits", {})
-        ids = [int(h["_id"]) for h in hits.get("hits", [])]
+        hit_rows = hits.get("hits", [])
+        ids = [int(h["_id"]) for h in hit_rows]
+        scores = {int(h["_id"]): float(h.get("_score") or 0.0) for h in hit_rows}
         books_by_id = {b.id: b for b in self.db.query(Book).filter(Book.id.in_(ids or [0])).all()}
-        items = [book_card(books_by_id[i]) for i in ids if i in books_by_id]
+        items = []
+        for i in ids:
+            if i in books_by_id:
+                card = book_card(books_by_id[i])
+                card["keyword_score"] = round(scores.get(i, 0.0), 4)
+                items.append(card)
         total = hits.get("total", {}).get("value", len(items)) if isinstance(hits.get("total"), dict) else len(items)
-        self._record(q, total, user)
+        if record:
+            self._record(q, total, user)
         return {"items": items, "total": total, "page": page, "limit": limit, "search_backend": "elasticsearch", "index": self.index_name}
 
-    def _search_sql(self, q: str | None, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None) -> dict:
+    def _search_sql(self, q: str | None, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None, record: bool = True) -> dict:
         query = self.db.query(Book).filter(Book.is_deleted == False)  # noqa: E712
         if q:
             like = f"%{q}%"
@@ -206,15 +341,71 @@ class SearchService:
             books = [b for b in books if tag in [t.name for t in b.tags]]
         if author:
             books = [b for b in books if author in [a.name for a in b.authors]]
+        if q:
+            scored = [(b, self._local_keyword_score(q, b)) for b in books]
+            books = [b for b, _ in scored]
+            score_map = {b.id: s for b, s in scored}
+        else:
+            score_map = {}
         if sort == "rating":
             books.sort(key=lambda b: b.avg_rating, reverse=True)
         elif sort == "new":
             books.sort(key=lambda b: (b.is_new, b.created_at), reverse=True)
         elif sort == "title":
             books.sort(key=lambda b: b.title)
+        elif sort == "relevance" and q:
+            books.sort(key=lambda b: score_map.get(b.id, 0.0), reverse=True)
         else:
             books.sort(key=lambda b: b.hot_score + b.view_count * 0.1 + b.avg_rating, reverse=True)
-        if q:
+        if q and record:
             self._record(q, len(books), user)
         start = (page - 1) * limit
-        return {"items": [book_card(b) for b in books[start:start + limit]], "total": len(books), "page": page, "limit": limit, "search_backend": "sql-fallback"}
+        items = []
+        for b in books[start:start + limit]:
+            card = book_card(b)
+            if q:
+                card["keyword_score"] = round(score_map.get(b.id, 0.0), 4)
+            items.append(card)
+        return {"items": items, "total": len(books), "page": page, "limit": limit, "search_backend": "sql-fallback"}
+
+    def _candidate_books(self, category: str | None = None, tag: str | None = None, author: str | None = None) -> list[Book]:
+        query = self.db.query(Book).filter(Book.is_deleted == False)  # noqa: E712
+        if category:
+            query = query.filter(Book.category == category)
+        books = query.all()
+        if tag:
+            books = [b for b in books if tag in [t.name for t in b.tags]]
+        if author:
+            books = [b for b in books if author in [a.name for a in b.authors]]
+        return books
+
+    @staticmethod
+    def _local_keyword_score(q: str, book: Book) -> float:
+        text_parts = [
+            book.title or "",
+            book.subtitle or "",
+            book.description or "",
+            book.category or "",
+            book.difficulty or "",
+            book.publisher.name if book.publisher else "",
+            book.series.name if book.series else "",
+            " ".join(a.name for a in book.authors),
+            " ".join(t.name for t in book.tags),
+        ]
+        text = " ".join(text_parts).lower()
+        tokens = EmbeddingService.tokenize(q)
+        score = 0.0
+        for token in set(tokens):
+            if not token:
+                continue
+            freq = text.count(token.lower())
+            if freq:
+                score += min(freq, 5) * (1.0 + min(len(token), 6) / 6)
+        # Title/tag/author exact-match boost.
+        if q in (book.title or ""):
+            score += 8.0
+        if any(q in t.name for t in book.tags):
+            score += 5.0
+        if any(q in a.name for a in book.authors):
+            score += 5.0
+        return score

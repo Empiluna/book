@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_current_user_optional, require_admin
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.models import Book, BookComment, Bookmark, Bookshelf, CommentLike, PurchaseClick, PurchaseLink, User
+from app.models import Book, BookComment, Bookmark, Bookshelf, CommentLike, PurchaseClick, PurchaseLink, RecommendationFeedback, User
 from app.schemas import BookmarkRequest, CommentCreate, CommentUpdate, PurchaseLinkCreate, PurchaseLinkUpdate, ShelfCreateRequest, ShelfRenameRequest
 from app.services.serializers import book_card, comment_card, purchase_link_card
 from app.services.user_service import add_bookmark, move_bookmark, reading_stats, update_book_rating
@@ -22,6 +22,8 @@ def trial(book_id: int, db: Session = Depends(get_db), user: User | None = Depen
     if not book or book.is_deleted:
         raise HTTPException(404, "图书不存在")
     book.trial_count += 1
+    if user:
+        db.add(RecommendationFeedback(user_id=user.id, book_id=book_id, event_type="trial", source="trial_reader"))
     db.commit()
     allowed_pages = settings.TRIAL_PAGES_LOGIN if user else settings.TRIAL_PAGES_ANONYMOUS
     text = book.trial_text or book.description or "暂无试读内容。"
@@ -167,6 +169,7 @@ def purchase_click(book_id: int, channel: str, price: float | None = None, db: S
     book = db.get(Book, book_id)
     if book:
         book.hot_score += 0.5
+        db.add(RecommendationFeedback(user_id=user.id if user else None, book_id=book_id, event_type="purchase_click", source=channel))
     db.commit()
     return {"message": "购书跳转已记录"}
 

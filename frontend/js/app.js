@@ -65,7 +65,36 @@ async function loadShelfState(){
 function bookCard(b){
   const id = b.id || b.book_id;
   const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
-  return `<article class="book-card" onclick="openDetail(${id})"><img class="cover" src="${b.cover_url||''}" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐ ${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}${shelfButton(id,'在读')}</div></div></article>`;
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${b.cover_url||''}" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}${shelfButton(id,'在读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+}
+async function recordFeedback(bookId, eventType, source='frontend'){
+  if(!bookId) return;
+  try{
+    await api('/recommend/feedback', {
+      method:'POST',
+      body:JSON.stringify({book_id:bookId, event_type:eventType, source})
+    });
+  }catch(e){
+    console.warn('feedback failed', e);
+  }
+}
+async function markNotInterested(event, bookId){
+  event?.stopPropagation?.();
+  await recordFeedback(bookId, 'not_interested', 'detail_or_card');
+  document.querySelectorAll(`[data-book-card="${bookId}"]`).forEach(el=>el.classList.add('faded-out'));
+  currentBooks = currentBooks.filter(b => String(b.id || b.book_id) !== String(bookId));
+  setTimeout(()=>{
+    document.querySelectorAll(`[data-book-card="${bookId}"]`).forEach(el=>el.remove());
+  }, 180);
+  closeDetail();
+  toast('已减少类似推荐');
+}
+function recordExposure(items, source='home'){
+  if(!Array.isArray(items)) return;
+  items.slice(0, 20).forEach(b=>{
+    const id = b.id || b.book_id;
+    if(id) recordFeedback(id, 'exposure', source);
+  });
 }
 function miniItem(b){ return `<div class="mini-item" onclick="openDetail(${b.id || b.book_id})"><div><b>${b.title}</b><br><span>${(b.authors||[]).join('、')||b.author||''} · ⭐ ${b.avg_rating||0}</span></div><span>${b.category||''}</span></div>`; }
 function buildPurchaseChannels(book){
@@ -98,13 +127,17 @@ async function loadMetrics(){
   $('mComments').textContent = dash?.cards?.comments ?? '--';
   $('mGraph').textContent = (gs.books||0)+(gs.authors||0)+(gs.tags||0)+(gs.publishers||0)+(gs.series||0)+(gs.semantic_nodes||0);
 }
-async function loadRecommendations(){ await loadShelfState(); const data = await api('/recommend/home?limit=16'); currentBooks = data.items; $('recommendGrid').innerHTML = data.items.map(bookCard).join(''); populateGraphBookSelect(); }
+async function loadRecommendations(){ await loadShelfState(); const data = await api('/recommend/home?limit=16'); currentBooks = data.items; $('recommendGrid').innerHTML = data.items.map(bookCard).join(''); recordExposure(data.items, 'home'); populateGraphBookSelect(); }
 async function loadHot(){ const data = await api('/recommend/hot?limit=8'); $('hotList').innerHTML = data.items.map(miniItem).join(''); }
 async function loadNew(){ const data = await api('/recommend/new?limit=8'); $('newList').innerHTML = data.items.map(miniItem).join(''); }
 async function loadBooks(q=''){
   await loadShelfState();
-  const data = await api('/books' + (q ? `?q=${encodeURIComponent(q)}&limit=40` : '?limit=40'));
-  currentBooks = data.items; $('resultHint').textContent = `找到 ${data.total} 本图书 · ${data.search_backend}`; $('bookGrid').innerHTML = data.items.map(bookCard).join(''); populateGraphBookSelect();
+  const data = await api('/books' + (q ? `?q=${encodeURIComponent(q)}&limit=40&mode=hybrid` : '?limit=40'));
+  currentBooks = data.items;
+  $('resultHint').textContent = `找到 ${data.total} 本相关图书 · ${data.search_backend}`;
+  $('bookGrid').innerHTML = data.items.map(bookCard).join('');
+  recordExposure(data.items, q ? 'search' : 'discover');
+  populateGraphBookSelect();
 }
 async function loadOptions(){
   const data = await api('/books/meta/options');
@@ -142,11 +175,11 @@ async function openDetail(id){
   const b = await api(`/books/${id}`); activeBook=b;
   await loadShelfState();
   recordReadingAction(id, 'reading', 'detail');
+  recordFeedback(id, 'click', 'detail');
   const sim = await api(`/recommend/similar/${id}?limit=6`).catch(()=>({items:[]}));
   const comments = await api(`/ecosystem/comments/${id}`).catch(()=>({items:[]}));
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
-  const explain = recommendationExplainHtml(b, sim);
-  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · ⭐ ${b.avg_rating} (${b.rating_count}人评分)</p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}${shelfButton(b.id,'在读')}<button onclick="rateBook(${b.id})">评分</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="split"><div>${explain}</div><div><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div></div><h3>书评社区</h3><div class="mini-list">${comments.items.map(c=>`<div class="mini-item"><div><b>${c.nickname}</b><br><span>${c.content}</span></div><span>❤ ${c.likes_count} · ⭐ ${c.rating||'-'}</span></div>`).join('')||'暂无评论'}</div><div class="actions"><button onclick="commentBook(${b.id})">发表书评</button></div>`;
+  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · ⭐ ${b.avg_rating} (${b.rating_count}人评分)</p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}${shelfButton(b.id,'在读')}<button onclick="rateBook(${b.id})">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div><h3>书评社区</h3><div class="mini-list">${comments.items.map(c=>`<div class="mini-item"><div><b>${c.nickname}</b><br><span>${c.content}</span></div><span>❤ ${c.likes_count} · ⭐ ${c.rating||'-'}</span></div>`).join('')||'暂无评论'}</div><div class="actions"><button onclick="commentBook(${b.id})">发表书评</button></div>`;
   $('detailModal').classList.remove('hidden');
 }
 function closeDetail(){ $('detailModal').classList.add('hidden'); }
@@ -154,6 +187,7 @@ async function openReader(id){
   const data = await api(`/ecosystem/trial/${id}`);
   readerStartAt = Date.now(); readerBookId = id;
   recordReadingAction(id, 'reading', 'reader');
+  recordFeedback(id, 'trial', 'reader');
   $('readerContent').innerHTML = `<h2>${data.book.title} · 在线试读</h2><p class="meta">当前权限：${data.logged_in?'已登录10页':'未登录3页'} · ${data.content_type.toUpperCase()} · 支持 PDF.js / EPUB.js / 翻页 / 缩放 / 目录 / 进度保存</p><iframe src="${data.reader_url}" class="reader-frame"></iframe><div class="reader-tools"><button onclick="window.open('${data.reader_url}','_blank')">独立阅读器打开</button><button onclick="saveProgress(${id},25)">保存25%</button><button onclick="saveProgress(${id},100)">标记读完</button></div>`;
   $('readerModal').classList.remove('hidden');
 }

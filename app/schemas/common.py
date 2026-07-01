@@ -169,7 +169,7 @@ class RecommendWeightsUpdate(BaseModel):
 
 class FeedbackRequest(BaseModel):
     book_id: int
-    event_type: str = Field(pattern="^(exposure|click|not_interested)$")
+    event_type: str = Field(pattern="^(exposure|click|trial|bookmark|rating|purchase_click|not_interested|skip)$")
     source: str | None = None
 
 

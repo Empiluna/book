@@ -17,6 +17,7 @@ from app.models import (
     ReadingHistory,
     ReadingProgress,
     ReadingSession,
+    RecommendationFeedback,
     SearchLog,
     User,
     UserRating,
@@ -147,6 +148,8 @@ def rate_book(db: Session, user: User, book_id: int, rating: float) -> dict:
     else:
         db.add(UserRating(user_id=user.id, book_id=book_id, rating=rating))
     db.add(ReadingHistory(user_id=user.id, book_id=book_id, status="read", source="rating"))
+    db.add(RecommendationFeedback(user_id=user.id, book_id=book_id, event_type="rating", source="user_rating"))
+    book.hot_score += 0.25
     db.commit()
     update_book_rating(db, book_id)
     db.refresh(book)
@@ -181,6 +184,8 @@ def add_bookmark(db: Session, user: User, book_id: int, shelf_name: str = "想�
     else:
         row.reading_status = reading_status
     db.add(ReadingHistory(user_id=user.id, book_id=book_id, status=reading_status, source="bookmark"))
+    db.add(RecommendationFeedback(user_id=user.id, book_id=book_id, event_type="bookmark", source="bookshelf"))
+    book.hot_score += 0.35
     db.commit()
     return {"message": "已加入书架", "book": book_card(book), "shelf_name": shelf_name}
 

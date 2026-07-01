@@ -64,12 +64,13 @@ def list_books(
     tag: str | None = Query(None),
     author: str | None = Query(None),
     sort: str = Query("hot"),
+    mode: str = Query("hybrid", pattern="^(hybrid|semantic|keyword)$"),
     page: int = Query(1, ge=1),
     limit: int = Query(24, ge=1, le=200),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ):
-    return SearchService(db).search(q=q, category=category, tag=tag, author=author, sort=sort, page=page, limit=limit, user=user)
+    return SearchService(db).search(q=q, category=category, tag=tag, author=author, sort=sort, page=page, limit=limit, user=user, mode=mode)
 
 
 

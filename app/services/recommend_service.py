@@ -19,6 +19,18 @@ from app.services.user_service import build_user_profile
 settings = get_settings()
 
 
+FEEDBACK_WEIGHTS: dict[str, float] = {
+    "exposure": 0.03,
+    "click": 0.20,
+    "trial": 0.40,
+    "bookmark": 0.80,
+    "rating": 0.60,
+    "purchase_click": 0.70,
+    "not_interested": -1.20,
+    "skip": -0.30,
+}
+
+
 def get_weights(db: Session) -> dict[str, float]:
     base = {
         "kg": settings.RECOMMEND_KG_WEIGHT,
@@ -190,6 +202,118 @@ class RecommendService:
                 rows.append({"book": b, "score": self._norm(score), "source": "cf", "reason": "基于用户-图书评分矩阵计算的ItemCF相似推荐。"})
         return rows
 
+
+    def _feedback_rows(self, user: User | None) -> list[RecommendationFeedback]:
+        if not user:
+            return []
+        return self.db.query(RecommendationFeedback).filter_by(user_id=user.id).order_by(RecommendationFeedback.created_at.desc()).limit(300).all()
+
+    def _feedback_signal(self, user: User | None) -> dict[str, Any]:
+        """Aggregate online feedback into exact-book and similar-feature preference signals."""
+        rows = self._feedback_rows(user)
+        exact: defaultdict[int, float] = defaultdict(float)
+        tag_pref: defaultdict[str, float] = defaultdict(float)
+        author_pref: defaultdict[str, float] = defaultdict(float)
+        category_pref: defaultdict[str, float] = defaultdict(float)
+        for row in rows:
+            weight = FEEDBACK_WEIGHTS.get(row.event_type, 0.0)
+            exact[row.book_id] += weight
+            book = self.db.get(Book, row.book_id)
+            if not book:
+                continue
+            # Similar books only receive a softened signal. Negative feedback suppresses same-topic books.
+            soft = weight * 0.25
+            if book.category:
+                category_pref[book.category] += soft
+            for tag in book.tags:
+                tag_pref[tag.name] += soft
+            for author in book.authors:
+                author_pref[author.name] += soft
+        return {"exact": exact, "tags": tag_pref, "authors": author_pref, "categories": category_pref}
+
+    def rerank_with_user_feedback(self, rows: list[dict], user: User | None) -> list[dict]:
+        """Adjust candidate scores by explicit and implicit online feedback."""
+        signal = self._feedback_signal(user)
+        if not signal["exact"] and not signal["tags"] and not signal["authors"] and not signal["categories"]:
+            for row in rows:
+                row.setdefault("rerank", {})["feedback_score"] = 0.0
+                row["base_score"] = row.get("score", 0.0)
+            return rows
+        adjusted = []
+        for row in rows:
+            book: Book = row["book"]
+            base = float(row.get("score") or 0.0)
+            score = float(signal["exact"].get(book.id, 0.0))
+            if book.category:
+                score += float(signal["categories"].get(book.category, 0.0))
+            score += sum(float(signal["tags"].get(t.name, 0.0)) for t in book.tags)
+            score += sum(float(signal["authors"].get(a.name, 0.0)) for a in book.authors)
+            # Keep feedback strong enough to be visible, but bounded to avoid one click dominating all ranking.
+            bounded = max(min(score, 1.2), -1.2)
+            row["base_score"] = base
+            row["score"] = base + bounded * 0.18
+            row.setdefault("rerank", {})["feedback_score"] = round(bounded, 4)
+            if bounded <= -1.0:
+                row["rerank"]["suppressed_by_feedback"] = True
+            adjusted.append(row)
+        adjusted.sort(key=lambda x: x["score"], reverse=True)
+        return adjusted
+
+    def rerank_with_novelty(self, rows: list[dict], user: User | None) -> list[dict]:
+        """Boost new and less over-exposed books, while keeping quality constraints."""
+        interacted: set[int] = set()
+        if user:
+            interacted |= {r.book_id for r in self.db.query(UserRating).filter_by(user_id=user.id).all()}
+            interacted |= {b.book_id for b in self.db.query(Bookmark).filter_by(user_id=user.id).all()}
+            interacted |= {f.book_id for f in self.db.query(RecommendationFeedback).filter_by(user_id=user.id).all()}
+        for row in rows:
+            book: Book = row["book"]
+            novelty = 0.0
+            if book.is_new:
+                novelty += 0.08
+            if book.id not in interacted:
+                novelty += 0.04
+            # Lower-hot but reasonably rated books get a small discovery boost.
+            if (book.avg_rating or 0) >= 4.0 and (book.hot_score or 0) < 5.0:
+                novelty += 0.05
+            row["score"] = float(row.get("score") or 0.0) + novelty
+            row.setdefault("rerank", {})["novelty_score"] = round(novelty, 4)
+        rows.sort(key=lambda x: x["score"], reverse=True)
+        return rows
+
+    def rerank_with_diversity(self, rows: list[dict], limit: int) -> list[dict]:
+        """Greedy diversity reranking to avoid same author/category dominating the list."""
+        selected: list[dict] = []
+        remaining = list(rows)
+        category_count: Counter[str] = Counter()
+        author_count: Counter[str] = Counter()
+        while remaining and len(selected) < limit:
+            best_idx = 0
+            best_value = -10**9
+            for idx, row in enumerate(remaining):
+                book: Book = row["book"]
+                penalty = 0.0
+                if book.category and category_count[book.category] >= 3:
+                    penalty += 0.10 * (category_count[book.category] - 2)
+                for author in book.authors:
+                    if author_count[author.name] >= 2:
+                        penalty += 0.08 * (author_count[author.name] - 1)
+                value = float(row.get("score") or 0.0) - penalty
+                if value > best_value:
+                    best_idx = idx
+                    best_value = value
+            chosen = remaining.pop(best_idx)
+            book = chosen["book"]
+            diversity_penalty = round(float(chosen.get("score") or 0.0) - best_value, 4)
+            chosen["score"] = round(best_value, 4)
+            chosen.setdefault("rerank", {})["diversity_penalty"] = diversity_penalty
+            selected.append(chosen)
+            if book.category:
+                category_count[book.category] += 1
+            for author in book.authors:
+                author_count[author.name] += 1
+        return selected
+
     def hybrid(self, user: User | None, limit: int = 20, scene: str = "home") -> dict:
         weights = get_weights(self.db)
         excluded = self._excluded_book_ids(user)
@@ -217,9 +341,17 @@ class RecommendService:
             for r in self.hot_scores(limit=limit) + self.new_scores(limit=limit):
                 b = r["book"]
                 merged.setdefault(b.id, {"book": b, "score": r["score"] * 0.5, "sources": [r["source"]], "reasons": [r["reason"]], "paths": []})
-        ranked = sorted(merged.values(), key=lambda x: x["score"], reverse=True)[:limit]
-        items = [book_card(x["book"], score=x["score"], reason=self.generate_reason(x), source="+".join(sorted(set(x["sources"]))), paths=x["paths"]) for x in ranked]
-        return {"scene": scene, "weights": weights, "items": items, "total": len(items)}
+        ranked = sorted(merged.values(), key=lambda x: x["score"], reverse=True)
+        ranked = self.rerank_with_user_feedback(ranked, user)
+        ranked = self.rerank_with_novelty(ranked, user)
+        ranked = self.rerank_with_diversity(ranked, limit=limit)
+        items = []
+        for x in ranked:
+            card = book_card(x["book"], score=x["score"], reason=self.generate_reason(x), source="+".join(sorted(set(x["sources"]))), paths=x["paths"])
+            card["base_score"] = round(float(x.get("base_score", x.get("score", 0.0))), 4)
+            card["rerank"] = x.get("rerank", {})
+            items.append(card)
+        return {"scene": scene, "weights": weights, "items": items, "total": len(items), "rerank_strategy": "online_feedback + novelty + diversity"}
 
     def similar(self, book_id: int, limit: int = 12) -> dict:
         book = self.db.get(Book, book_id)
@@ -253,16 +385,30 @@ class RecommendService:
         return result
 
     def feedback(self, user: User | None, book_id: int, event_type: str, source: str | None = None) -> dict:
+        if event_type not in FEEDBACK_WEIGHTS:
+            raise HTTPException(400, f"不支持的反馈类型：{event_type}")
         book = self.db.get(Book, book_id)
-        if not book:
+        if not book or book.is_deleted:
             raise HTTPException(404, "图书不存在")
         self.db.add(RecommendationFeedback(user_id=user.id if user else None, book_id=book_id, event_type=event_type, source=source))
         if event_type == "click":
-            book.hot_score += 0.3
+            book.hot_score += 0.20
+            book.view_count += 1
         elif event_type == "exposure":
             book.hot_score += 0.03
+        elif event_type == "trial":
+            book.hot_score += 0.18
+            book.trial_count += 1
+        elif event_type == "bookmark":
+            book.hot_score += 0.35
+        elif event_type == "rating":
+            book.hot_score += 0.25
+        elif event_type == "purchase_click":
+            book.hot_score += 0.40
+        elif event_type in {"not_interested", "skip"}:
+            book.hot_score = max(0.0, (book.hot_score or 0.0) - 0.15)
         self.db.commit()
-        return {"message": "反馈已记录", "event_type": event_type}
+        return {"message": "反馈已记录", "event_type": event_type, "weight": FEEDBACK_WEIGHTS[event_type]}
 
     def natural_language(self, message: str, user: User | None, limit: int = 8) -> dict:
         tokens = re.findall(r"[\u4e00-\u9fa5A-Za-z0-9]+", message)
