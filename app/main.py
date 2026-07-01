@@ -62,6 +62,14 @@ def index():
     return {"message": settings.PROJECT_NAME, "docs": "/docs"}
 
 
+@app.get("/admin")
+def admin_index():
+    admin_file = FRONTEND / "admin.html"
+    if admin_file.exists():
+        return FileResponse(str(admin_file))
+    return {"message": settings.PROJECT_NAME, "docs": "/docs"}
+
+
 @app.get("/health")
 def health():
     db = SessionLocal()

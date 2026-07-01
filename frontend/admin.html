@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理后台 · 知人知书</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <main class="shell" style="margin-left:0">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Admin Console</p>
+        <h1>管理后台</h1>
+      </div>
+      <div class="actions">
+        <a class="doclink" href="/">返回用户端</a>
+        <button id="logoutBtn" class="ghost hidden">退出登录</button>
+      </div>
+    </header>
+
+    <section id="adminLogin" class="panel glass">
+      <h3>管理员登录</h3>
+      <div class="admin-toolbar">
+        <input id="adminLoginUser" value="admin" placeholder="管理员账号" />
+        <input id="adminLoginPass" value="admin123" type="password" placeholder="密码" />
+        <button id="adminLoginBtn" class="primary">登录后台</button>
+      </div>
+      <p class="meta">只有管理员账号登录后才能使用后台功能。</p>
+    </section>
+
+    <section id="adminApp" class="hidden">
+      <div class="admin-grid">
+        <div class="panel glass"><h3>运营总览</h3><div id="adminStats" class="stats-cards"></div></div>
+        <div class="panel glass"><h3>图谱统计</h3><div id="adminGraphStats" class="stats-cards"></div></div>
+        <div class="panel glass wide">
+          <div class="admin-tabs">
+            <button class="admin-tab active" data-admin-tab="books">图书</button>
+            <button class="admin-tab" data-admin-tab="users">用户</button>
+            <button class="admin-tab" data-admin-tab="comments">评论</button>
+            <button class="admin-tab" data-admin-tab="settings">设置</button>
+            <button class="admin-tab" data-admin-tab="graphAdmin">图谱</button>
+          </div>
+
+          <div id="adminBooks" class="admin-pane active">
+            <div class="admin-toolbar">
+              <input id="adminBookSearch" placeholder="搜索图书" />
+              <button onclick="adminLoadBooks()">搜索</button>
+              <button onclick="adminResetBookForm()">新建</button>
+              <button onclick="adminReindex()">重建索引</button>
+            </div>
+            <form id="adminBookForm" class="admin-form">
+              <input type="hidden" id="adminBookId" />
+              <input id="adminBookTitle" placeholder="书名" required />
+              <input id="adminBookAuthors" placeholder="作者，多个用逗号分隔" />
+              <input id="adminBookCategory" placeholder="分类" />
+              <input id="adminBookTags" placeholder="标签，多个用逗号分隔" />
+              <input id="adminBookPublisher" placeholder="出版社" />
+              <input id="adminBookYear" type="number" placeholder="出版年份" />
+              <input id="adminBookCover" placeholder="封面 URL" />
+              <textarea id="adminBookDescription" placeholder="简介"></textarea>
+              <div class="admin-form-actions">
+                <button class="primary" type="submit">保存图书</button>
+                <button type="button" onclick="adminResetBookForm()">清空</button>
+              </div>
+            </form>
+            <div id="adminBookList" class="admin-table"></div>
+          </div>
+
+          <div id="adminUsers" class="admin-pane">
+            <div class="admin-toolbar">
+              <input id="adminUserSearch" placeholder="搜索用户名或邮箱" />
+              <button onclick="adminLoadUsers()">搜索</button>
+              <button onclick="adminExportUsers()">导出 CSV</button>
+            </div>
+            <div id="adminUserList" class="admin-table"></div>
+          </div>
+
+          <div id="adminComments" class="admin-pane">
+            <div class="admin-toolbar">
+              <input id="adminCommentBookId" type="number" placeholder="图书 ID" />
+              <input id="adminCommentUsername" placeholder="用户名" />
+              <button onclick="adminLoadComments()">筛选</button>
+            </div>
+            <div id="adminCommentList" class="admin-table"></div>
+          </div>
+
+          <div id="adminSettings" class="admin-pane">
+            <div class="admin-subpanel">
+              <h3>推荐权重</h3>
+              <div class="admin-form weights">
+                <input id="adminWeightKg" type="number" step="0.05" min="0" max="1" placeholder="KG" />
+                <input id="adminWeightCf" type="number" step="0.05" min="0" max="1" placeholder="CF" />
+                <input id="adminWeightHot" type="number" step="0.05" min="0" max="1" placeholder="Hot" />
+                <input id="adminWeightNew" type="number" step="0.05" min="0" max="1" placeholder="New" />
+                <button class="primary" onclick="adminSaveWeights()">保存权重</button>
+                <button onclick="adminPrecomputeItemCf()">预计算 ItemCF</button>
+              </div>
+            </div>
+            <div class="admin-subpanel">
+              <h3>系统配置</h3>
+              <div class="admin-toolbar">
+                <input id="adminConfigKey" placeholder="配置键" />
+                <input id="adminConfigValue" placeholder="配置值" />
+                <input id="adminConfigDesc" placeholder="说明" />
+                <button onclick="adminSaveConfig()">保存配置</button>
+              </div>
+              <div id="adminConfigList" class="admin-table"></div>
+            </div>
+          </div>
+
+          <div id="adminGraphAdmin" class="admin-pane">
+            <div class="admin-toolbar">
+              <button onclick="adminGraphInit()">初始化约束</button>
+              <button onclick="adminGraphSync()">同步图谱</button>
+              <button onclick="adminGraphSemantic()">语义增强</button>
+            </div>
+            <div class="admin-toolbar">
+              <input id="adminRelSource" type="number" placeholder="源图书 ID" />
+              <input id="adminRelTarget" type="number" placeholder="目标图书 ID" />
+              <input id="adminRelType" placeholder="关系类型" value="SIMILAR_TO" />
+              <input id="adminRelWeight" type="number" step="0.1" value="1" />
+              <button onclick="adminCreateRelation()">创建关系</button>
+            </div>
+            <textarea id="adminCypher" class="admin-code" placeholder="MATCH (n) RETURN n LIMIT 10"></textarea>
+            <button onclick="adminRunCypher()">执行 Cypher</button>
+            <pre id="adminGraphResult" class="admin-result"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/admin.js?v=admin-page-1"></script>
+</body>
+</html>

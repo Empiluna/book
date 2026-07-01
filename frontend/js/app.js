@@ -604,7 +604,7 @@ async function sendChat(){
   box.innerHTML+=`<div class="bubble">${data.answer}${(data.books||[]).slice(0,3).map(b=>`<div class="mini-item" onclick="openDetail(${b.id||b.book_id})"><b>${b.title}</b><span>${b.reason||''}</span></div>`).join('')}</div>`; box.scrollTop=box.scrollHeight;
 }
 function updateSearchbarForView(view){ if($('topSearchbar')) $('topSearchbar').style.display = ['home','discover'].includes(view) ? 'flex' : 'none'; }
-async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile(), loadAdmin()]); }
+async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile()]); }
 
 function activateView(view){
   if(view === 'admin' && !isAdmin()){
@@ -630,7 +630,7 @@ document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click
 }));
 $('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('loginBtn').onclick=()=>login($('loginUser').value,$('loginPass').value);
-$('adminBtn').onclick=()=>login('admin','admin123', true);
+$('adminBtn').onclick=()=>{ window.location.href = '/admin'; };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 updateUserBadge(); updateSearchbarForView('home'); loadAll();
