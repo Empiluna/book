@@ -171,6 +171,33 @@ async function recordReadingAction(bookId, status='reading', source='detail'){
   if(!token) return;
   api(`/user/history/${bookId}?status=${encodeURIComponent(status)}&source=${encodeURIComponent(source)}`, {method:'POST'}).catch(()=>{});
 }
+function stars(value){
+  const rating = Number(value || 0);
+  return Array.from({length:5}, (_, i)=>`<span class="${i < Math.round(rating) ? 'on' : ''}">★</span>`).join('');
+}
+function reviewSummaryHtml(comments){
+  const summary = comments.summary || {};
+  const dist = summary.distribution || {};
+  const max = Math.max(1, ...Object.values(dist).map(Number));
+  const rows = [5,4,3,2,1].map(n=>`<div class="rating-bar"><span>${n}星</span><i><b style="width:${((Number(dist[n]||0)/max)*100).toFixed(0)}%"></b></i><em>${dist[n]||0}</em></div>`).join('');
+  return `<div class="review-summary"><div class="review-score"><b>${Number(summary.avg_rating||0).toFixed(1)}</b><div class="stars">${stars(summary.avg_rating)}</div><span>${summary.total||0} 条书评 · ${summary.rating_count||0} 个评分</span></div><div class="rating-bars">${rows}</div></div>`;
+}
+function reviewCardHtml(c, bookId){
+  const mine = currentUser && c.user_id === currentUser.id;
+  return `<article class="review-card ${c.is_pinned ? 'pinned' : ''}">
+    <div class="review-head"><div><b>${attr(c.nickname || c.username || '匿名用户')}</b>${c.is_pinned?'<span class="review-pin">置顶</span>':''}<div class="stars">${stars(c.rating)}</div></div><time>${(c.created_at||'').slice(0,10)}</time></div>
+    <p>${attr(c.content || '')}</p>
+    <div class="review-actions">
+      <button class="ghost ${c.liked?'active':''}" onclick="likeComment(${c.id}, ${bookId})">❤ ${c.likes_count||0}</button>
+      ${mine || isAdmin() ? `<button class="ghost" onclick="editComment(${c.id}, ${bookId}, '${attr(c.content)}', '${c.rating||''}')">编辑</button><button class="ghost danger" onclick="deleteComment(${c.id}, ${bookId})">删除</button>` : ''}
+    </div>
+  </article>`;
+}
+function reviewsHtml(bookId, comments){
+  const items = comments.items || [];
+  const list = items.length ? items.map(c=>reviewCardHtml(c, bookId)).join('') : '<div class="empty-review">还没有书评，来写第一条吧。</div>';
+  return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating"><option value="5">5 星</option><option value="4">4 星</option><option value="3">3 星</option><option value="2">2 星</option><option value="1">1 星</option></select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
+}
 async function openDetail(id){
   const b = await api(`/books/${id}`); activeBook=b;
   await loadShelfState();
@@ -179,7 +206,7 @@ async function openDetail(id){
   const sim = await api(`/recommend/similar/${id}?limit=6`).catch(()=>({items:[]}));
   const comments = await api(`/ecosystem/comments/${id}`).catch(()=>({items:[]}));
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
-  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · ⭐ ${b.avg_rating} (${b.rating_count}人评分)</p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}${shelfButton(b.id,'在读')}<button onclick="rateBook(${b.id})">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div><h3>书评社区</h3><div class="mini-list">${comments.items.map(c=>`<div class="mini-item"><div><b>${c.nickname}</b><br><span>${c.content}</span></div><span>❤ ${c.likes_count} · ⭐ ${c.rating||'-'}</span></div>`).join('')||'暂无评论'}</div><div class="actions"><button onclick="commentBook(${b.id})">发表书评</button></div>`;
+  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · ⭐ ${b.avg_rating} (${b.rating_count}人评分)</p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}${shelfButton(b.id,'在读')}<button onclick="rateBook(${b.id})">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
   $('detailModal').classList.remove('hidden');
 }
 function closeDetail(){ $('detailModal').classList.add('hidden'); }
@@ -218,7 +245,37 @@ async function toggleShelf(event, id, shelf){
 }
 async function addShelf(id, shelf){ return toggleShelf(null, id, shelf); }
 async function rateBook(id){ if(!token) return toast('请先登录'); const rating=Number(prompt('请输入评分 0.5-5.0','5')); if(!rating) return; await api(`/user/rating/${id}`, {method:'POST', body:JSON.stringify({rating})}); toast('评分已保存'); openDetail(id); loadProfile(); }
-async function commentBook(id){ if(!token) return toast('请先登录'); const content=prompt('写一条书评','这本书值得一读。'); if(!content) return; await api(`/ecosystem/comments/${id}`, {method:'POST', body:JSON.stringify({content, rating:5})}); toast('评论已发布'); openDetail(id); loadProfile(); }
+async function submitReview(id){
+  if(!token) return toast('请先登录');
+  const content = $('reviewContent')?.value.trim();
+  const rating = Number($('reviewRating')?.value || 5);
+  if(!content) return toast('请先写一点书评内容');
+  await api(`/ecosystem/comments/${id}`, {method:'POST', body:JSON.stringify({content, rating})});
+  toast('评论已发布');
+  openDetail(id); loadProfile();
+}
+async function commentBook(id){ return submitReview(id); }
+async function likeComment(commentId, bookId){
+  if(!token) return toast('请先登录');
+  await api(`/ecosystem/comments/${commentId}/like`, {method:'POST'});
+  openDetail(bookId);
+}
+async function editComment(commentId, bookId, oldContent, oldRating){
+  if(!token) return toast('请先登录');
+  const content = prompt('编辑书评', oldContent || '');
+  if(!content) return;
+  const rating = Number(prompt('评分 1-5', oldRating || '5')) || null;
+  await api(`/ecosystem/comments/${commentId}`, {method:'PUT', body:JSON.stringify({content, rating})});
+  toast('书评已更新');
+  openDetail(bookId);
+}
+async function deleteComment(commentId, bookId){
+  if(!token) return toast('请先登录');
+  if(!confirm('确认删除这条书评？')) return;
+  await api(`/ecosystem/comments/${commentId}`, {method:'DELETE'});
+  toast('书评已删除');
+  openDetail(bookId);
+}
 
 function graphTypeLabel(type){ return ({Profile:'画像',InterestCluster:'兴趣簇',SeedBook:'种子书',Book:'图书',Author:'作者',Tag:'标签',Publisher:'出版社',Series:'丛书/系列',Field:'领域',Audience:'适读人群',Difficulty:'阅读难度',Keyword:'关键词',Topic:'主题'}[type] || type || '节点'); }
 function graphRelationLabel(label){ return ({INTEREST_SEED:'兴趣种子',PROFILE_CLUSTER:'兴趣簇',CLUSTER_RECOMMEND:'画像推荐',profile_cluster:'兴趣簇',PREFERS_TAG:'偏好标签',PREFERS_AUTHOR:'偏好作者',PREFERS_FIELD:'偏好领域',PROFILE_RECOMMEND:'画像推荐',LEADS_TO:'推出推荐',AUTHORED_BY:'作者',TAGGED_AS:'标签',PUBLISHED_BY:'出版社',BELONGS_TO_SERIES:'所属系列',SIMILAR_TO:'相似推荐',BELONGS_TO_FIELD:'领域',SUITABLE_FOR:'适读人群',HAS_DIFFICULTY:'阅读难度',HAS_KEYWORD:'关键词',HAS_TOPIC:'主题',NEXT_READ:'续读推荐',PREREQUISITE_OF:'前置阅读',same_author:'同作者',same_tag:'同标签',same_field:'同领域',same_audience:'同适读人群',topic_bridge:'主题桥接',same_keyword:'共同关键词',same_difficulty:'同阅读难度',similar:'相似推荐',multi_hop:'多跳语义'}[label] || label || '关联'); }

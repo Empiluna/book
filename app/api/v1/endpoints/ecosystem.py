@@ -56,9 +56,27 @@ def trial_content(book_id: int, page: int = Query(1, ge=1), db: Session = Depend
 def comments(book_id: int, db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
     rows = db.query(BookComment).filter_by(book_id=book_id, is_deleted=False).order_by(BookComment.is_pinned.desc(), BookComment.likes_count.desc(), BookComment.created_at.desc()).all()
     liked_ids = set()
+    my_comment_id = None
     if user:
         liked_ids = {x.comment_id for x in db.query(CommentLike).filter(CommentLike.user_id == user.id, CommentLike.comment_id.in_([c.id for c in rows] or [0])).all()}
-    return {"items": [comment_card(c, liked=c.id in liked_ids) for c in rows]}
+        own = next((c for c in rows if c.user_id == user.id), None)
+        my_comment_id = own.id if own else None
+    ratings = [c.rating for c in rows if c.rating]
+    distribution = {str(i): 0 for i in range(1, 6)}
+    for rating in ratings:
+        distribution[str(int(round(rating)))] += 1
+    avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else 0
+    return {
+        "items": [comment_card(c, liked=c.id in liked_ids) for c in rows],
+        "summary": {
+            "total": len(rows),
+            "avg_rating": avg_rating,
+            "rating_count": len(ratings),
+            "distribution": distribution,
+            "pinned_count": sum(1 for c in rows if c.is_pinned),
+            "my_comment_id": my_comment_id,
+        },
+    }
 
 
 @router.post("/comments/{book_id}")
