@@ -7,6 +7,7 @@ function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content
 function isAdmin(){ return !!(currentUser && currentUser.is_admin); }
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),2600); }
 function attr(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function html(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function stat(label, value){ return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
 function adminSplit(value){ return String(value||'').split(/[,，、]/).map(x=>x.trim()).filter(Boolean); }
 function adminJson(data){ return JSON.stringify(data, null, 2); }
@@ -25,6 +26,8 @@ function setAdminVisible(visible){
   $('adminLogin').classList.toggle('hidden', visible);
   $('adminApp').classList.toggle('hidden', !visible);
   $('logoutBtn').classList.toggle('hidden', !visible);
+  $('adminAssistantBtn')?.classList.toggle('hidden', !visible);
+  if(!visible) $('adminAssistant')?.classList.add('hidden');
 }
 
 async function requireAdmin(){
@@ -76,6 +79,31 @@ function logout(){
   token = '';
   currentUser = null;
   setAdminVisible(false);
+}
+
+function openAdminAssistant(){
+  if(!isAdmin()) return toast('请先使用管理员账号登录');
+  $('adminAssistant')?.classList.toggle('hidden');
+}
+
+async function sendAdminChat(){
+  if(!isAdmin()) return toast('请先使用管理员账号登录');
+  const input = $('adminChatInput');
+  const box = $('adminChatBox');
+  const message = input.value.trim();
+  if(!message) return;
+  input.value = '';
+  box.innerHTML += `<div class="bubble user">${html(message)}</div>`;
+  box.scrollTop = box.scrollHeight;
+  try{
+    const prompt = `请以管理员助手身份回答，重点关注图书管理、用户运营、评论审核、推荐策略、知识图谱和系统配置。管理员问题：${message}`;
+    const data = await api('/chat/send', {method:'POST', body:JSON.stringify({message:prompt})});
+    const books = (data.books || []).slice(0, 3).map(b=>`<div class="mini-item"><b>${html(b.title)}</b><span>${html(b.reason || b.category || '')}</span></div>`).join('');
+    box.innerHTML += `<div class="bubble">${html(data.answer || '我暂时没有得到有效回复。')}${books}</div>`;
+  }catch(e){
+    box.innerHTML += `<div class="bubble">助手暂时不可用：${html(e.message || '请求失败')}</div>`;
+  }
+  box.scrollTop = box.scrollHeight;
 }
 
 async function loadAdmin(){
@@ -213,5 +241,7 @@ document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click
 $('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('adminLoginBtn').onclick = adminLogin;
 $('logoutBtn').onclick = logout;
+$('adminAssistantBtn').onclick = openAdminAssistant;
 $('adminLoginPass').addEventListener('keydown', e=>{ if(e.key === 'Enter') adminLogin(); });
+$('adminChatInput')?.addEventListener('keydown', e=>{ if(e.key === 'Enter') sendAdminChat(); });
 loadAdmin();

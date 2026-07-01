@@ -15,6 +15,7 @@
       </div>
       <div class="actions">
         <a class="doclink" href="/">返回用户端</a>
+        <button id="adminAssistantBtn" class="ghost hidden">智能助手</button>
         <button id="logoutBtn" class="ghost hidden">退出登录</button>
       </div>
     </header>
@@ -130,6 +131,20 @@
       </div>
     </section>
   </main>
+
+  <div id="adminAssistant" class="assistant hidden">
+    <div class="assistant-head">
+      <b>管理员智能助手</b>
+      <button onclick="openAdminAssistant()">×</button>
+    </div>
+    <div id="adminChatBox" class="chat-box">
+      <div class="bubble">可以问我图书管理、用户运营、评论审核、推荐权重和知识图谱维护相关问题。</div>
+    </div>
+    <div class="chat-input">
+      <input id="adminChatInput" placeholder="例如：帮我分析后台今天应该关注什么" />
+      <button onclick="sendAdminChat()">发送</button>
+    </div>
+  </div>
 
   <script src="/static/js/admin.js?v=admin-page-1"></script>
 </body>
