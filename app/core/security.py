@@ -29,9 +29,7 @@ def _unb64(data: str) -> bytes:
 
 
 def hash_password(password: str) -> str:
-    """Hash password with bcrypt when passlib is installed; fallback to PBKDF2 for offline demo."""
-    if _pwd_context is not None:
-        return _pwd_context.hash(password)
+    """Hash password with PBKDF2 for stable local and classroom demos."""
     salt = os.urandom(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
     return f"pbkdf2_sha256${_b64(salt)}${_b64(digest)}"
@@ -40,7 +38,10 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, password_hash: str) -> bool:
     try:
         if password_hash.startswith("$2") and _pwd_context is not None:
-            return _pwd_context.verify(password, password_hash)
+            try:
+                return _pwd_context.verify(password, password_hash)
+            except Exception:
+                return False
         algo, salt_b64, digest_b64 = password_hash.split("$", 2)
         if algo != "pbkdf2_sha256":
             return False
