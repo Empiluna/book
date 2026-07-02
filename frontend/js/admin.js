@@ -98,7 +98,7 @@ async function adminLogin(){
   const password = $('adminLoginPass').value;
   if(!account || !password) return toast('请填写管理员账号和密码');
   try{
-    const data = await api('/user/login', {method:'POST', body:JSON.stringify({account, username_or_email:account, password})});
+    const data = await api('/user/login', {method:'POST', body:JSON.stringify({account, username_or_email:account, password, role:"admin"})});
     token = data.access_token;
     currentUser = data.user;
     localStorage.setItem('token', token);

@@ -69,6 +69,14 @@ def index():
     return {"message": settings.PROJECT_NAME, "docs": "/docs"}
 
 
+@app.get("/login")
+def login_page():
+    login_file = FRONTEND / "login.html"
+    if login_file.exists():
+        return FileResponse(str(login_file))
+    return FileResponse(str(FRONTEND / "index.html"))
+
+
 @app.get("/admin")
 def admin_index():
     admin_file = FRONTEND / "admin.html"

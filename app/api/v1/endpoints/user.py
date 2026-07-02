@@ -34,13 +34,13 @@ router = APIRouter(prefix="/user", tags=["模块一 · 用户画像"])
 
 @router.post("/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    return {"message": "注册成功", "user": register_user(db, data.username, data.email, data.password, data.nickname)}
+    return {"message": "注册成功", "user": register_user(db, data.username, data.email, data.password, data.nickname, data.role, data.admin_code)}
 
 
 @router.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     account = data.account or data.username_or_email
-    return authenticate_user(db, account or "", data.password)
+    return authenticate_user(db, account or "", data.password, data.role)
 
 
 @router.get("/me")

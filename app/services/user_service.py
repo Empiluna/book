@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password, is_email, validate_password_strength, verify_password
 from app.models import (
     Book,
@@ -25,6 +26,14 @@ from app.models import (
 from app.services.serializers import book_card, user_card
 
 DEFAULT_SHELVES = [("想读", "want_to_read"), ("在读", "reading"), ("已读", "read")]
+settings = get_settings()
+
+
+def normalize_role(role: str | None) -> str:
+    role = (role or "user").strip().lower()
+    if role in {"admin", "administrator", "manager"}:
+        return "admin"
+    return "user"
 
 
 def ensure_default_shelves(db: Session, user_id: int) -> None:
@@ -35,13 +44,39 @@ def ensure_default_shelves(db: Session, user_id: int) -> None:
     db.commit()
 
 
-def register_user(db: Session, username: str, email: str, password: str, nickname: str | None = None) -> dict:
+def register_user(
+    db: Session,
+    username: str,
+    email: str,
+    password: str,
+    nickname: str | None = None,
+    role: str = "user",
+    admin_code: str | None = None,
+) -> dict:
+    """注册账号。
+
+    普通用户直接注册；管理员注册需要填写管理员注册码，避免所有人都能创建后台账号。
+    默认管理员注册码可在 .env 中通过 ADMIN_REGISTER_CODE 修改。
+    """
     validate_password_strength(password)
+    role = normalize_role(role)
+    is_admin = role == "admin"
+
+    if is_admin and (admin_code or "").strip() != settings.ADMIN_REGISTER_CODE:
+        raise HTTPException(403, "管理员注册码错误，不能注册管理员账号")
+
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(400, "该用户名已被注册，请更换")
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(400, "该邮箱已被注册")
-    user = User(username=username, email=email, nickname=nickname or username, hashed_password=hash_password(password))
+
+    user = User(
+        username=username,
+        email=email,
+        nickname=nickname or username,
+        hashed_password=hash_password(password),
+        is_admin=is_admin,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -49,7 +84,7 @@ def register_user(db: Session, username: str, email: str, password: str, nicknam
     return user_card(user)
 
 
-def authenticate_user(db: Session, account: str, password: str) -> dict:
+def authenticate_user(db: Session, account: str, password: str, role: str | None = None) -> dict:
     query = User.email == account if is_email(account) else User.username == account
     user = db.query(User).filter(query).first()
     if not user or not verify_password(password, user.hashed_password):
@@ -59,6 +94,15 @@ def authenticate_user(db: Session, account: str, password: str) -> dict:
         raise HTTPException(401, "用户名或密码错误")
     if not user.is_active:
         raise HTTPException(403, "账号已被禁用，请联系管理员")
+
+    # 前端选择了“用户登录/管理员登录”时，后端也进行角色校验，避免入口混用。
+    if role:
+        role = normalize_role(role)
+        if role == "admin" and not user.is_admin:
+            raise HTTPException(403, "该账号不是管理员账号，请选择用户登录")
+        if role == "user" and user.is_admin:
+            raise HTTPException(403, "该账号是管理员账号，请选择管理员登录")
+
     user.failed_login_count = 0
     user.last_login_at = datetime.utcnow()
     db.commit()
