@@ -25,8 +25,17 @@ function updateAdminVisibility(){
   if(!isAdmin() && $('admin')?.classList.contains('active')) activateView('home');
 }
 function updateUserBadge(){
-  $('userBadge').textContent = currentUser ? `${currentUser.nickname || currentUser.username}${currentUser.is_admin ? ' · 管理员' : ''}` : '未登录';
+  const loggedIn = !!currentUser;
+  $('userBadge').textContent = loggedIn ? `${currentUser.nickname || currentUser.username}${currentUser.is_admin ? ' · 管理员' : ''}` : '未登录';
+  $('loginBtn').classList.toggle('hidden', loggedIn);
+  $('adminBtn').classList.toggle('hidden', loggedIn);
+  $('logoutBtn').classList.toggle('hidden', !loggedIn);
   updateAdminVisibility();
+}
+function logout(){
+  token = ''; currentUser = null;
+  localStorage.removeItem('token'); localStorage.removeItem('user');
+  updateUserBadge(); toast('已退出登录'); loadAll();
 }
 function attr(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function stat(label, value){ return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
@@ -820,6 +829,7 @@ document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click
 $('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('loginBtn').onclick=()=>{ window.location.href = '/login?mode=login&role=user'; };
 $('adminBtn').onclick=()=>{ window.location.href = '/admin'; };
+$('logoutBtn').onclick=()=>{ logout(); };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 renderChatMessages();
