@@ -632,8 +632,8 @@ document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click
   adminSwitchTab(btn.dataset.adminTab);
 }));
 $('adminBookForm')?.addEventListener('submit', adminSaveBook);
-$('loginBtn').onclick=()=>login($('loginUser').value,$('loginPass').value);
-$('adminBtn').onclick=()=>{ window.location.href = '/admin'; };
+$('loginBtn').onclick=()=>{ window.location.href = '/login?mode=login&role=user'; };
+$('adminBtn').onclick=()=>{ window.location.href = '/login?mode=login&role=admin'; };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 updateUserBadge(); updateSearchbarForView('home'); loadAll();
