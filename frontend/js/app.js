@@ -357,7 +357,107 @@ function pathCardsHtml(data){
   if(!rows.length) return '<div class="graph-side-card"><h4>推荐路径</h4><p class="meta">暂无路径。可以先登录、评分、加入书架或同步知识图谱。</p></div>';
   return `<div class="graph-side-card"><h4>推荐路径</h4><div class="path-list compact">${rows.slice(0,8).map(p=>`<div class="path-line"><span>${p.path_text}</span><em>${graphRelationLabel(p.type)} · 权重 ${Number(p.weight||0).toFixed(2)}</em></div>`).join('')}</div></div>`;
 }
+function renderGraphLocked(){
+  // 先找左侧图谱绘制区域
+  const canvas =
+    $('graphCanvas') ||
+    $('graphSvg') ||
+    $('graphChart') ||
+    document.querySelector('canvas') ||
+    document.querySelector('svg');
+
+  // 如果找到的是 canvas / svg，不能直接写 innerHTML，要找它的父容器
+  let graphMain = null;
+
+  if (canvas) {
+    graphMain = canvas.parentElement;
+  }
+
+  // 如果没找到 canvas，再尝试找常见图谱容器
+  if (!graphMain) {
+    graphMain =
+      $('graphCanvasWrap') ||
+      $('graphPanel') ||
+      $('graphMain') ||
+      document.querySelector('.graph-canvas-wrap') ||
+      document.querySelector('.graph-main') ||
+      document.querySelector('.graph-card') ||
+      document.querySelector('#graphView .glass') ||
+      document.querySelector('#graph .glass');
+  }
+
+  if (graphMain) {
+    graphMain.innerHTML = `
+      <div class="graph-locked-card">
+        <div class="graph-locked-visual">
+          <div class="locked-node center">我的<br>阅读画像</div>
+          <div class="locked-node n1">兴趣</div>
+          <div class="locked-node n2">图书</div>
+          <div class="locked-node n3">作者</div>
+          <div class="locked-node n4">标签</div>
+
+          <span class="locked-line l1"></span>
+          <span class="locked-line l2"></span>
+          <span class="locked-line l3"></span>
+          <span class="locked-line l4"></span>
+        </div>
+
+        <div class="graph-locked-content">
+          <div class="graph-locked-icon">KG</div>
+          <h3>登录后查看你的画像图谱</h3>
+          <p>
+            知识图谱会根据你的阅读历史、收藏、评分、搜索关键词和兴趣标签，
+            生成属于你的个性化阅读关系图。
+          </p>
+
+          <div class="graph-locked-preview">
+            <span>阅读画像</span>
+            <i></i>
+            <span>兴趣簇</span>
+            <i></i>
+            <span>推荐图书</span>
+          </div>
+
+          <button onclick="window.location.href='/login?role=user'">
+            登录后查看图谱
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // 右侧说明区域
+  const graphAside =
+    $('graphSide') ||
+    $('graphInfo') ||
+    document.querySelector('.graph-aside') ||
+    document.querySelector('.graph-sidebar');
+
+  if (graphAside) {
+    graphAside.innerHTML = `
+      <div class="graph-locked-side">
+        <h3>图谱功能已锁定</h3>
+        <p>登录后可以查看：</p>
+        <ul>
+          <li>个人兴趣簇</li>
+          <li>种子书关联</li>
+          <li>推荐路径解释</li>
+          <li>作者、标签、领域关系</li>
+        </ul>
+      </div>
+    `;
+  }
+
+  // 隐藏未登录不该操作的筛选区
+  document.querySelectorAll('.graph-toolbar, .graph-filter, .graph-controls').forEach(el => {
+    el.style.display = 'none';
+  });
+}
 async function loadGraph(){
+    if(!token){
+    renderGraphLocked();
+    return;
+  }
   const mode = $('graphMode')?.value || 'profile';
   const limit = Number($('graphNodeLimit')?.value || 20);
   if(mode === 'manual') await ensureGraphBookOptions();
