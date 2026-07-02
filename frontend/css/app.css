@@ -570,3 +570,179 @@
     width:100%;
   }
 }
+/* 未登录个人画像占位优化 */
+.guest-stat-card {
+  min-height: 132px;
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(124,58,237,.10), rgba(14,165,233,.10));
+  border: 1px solid rgba(124,58,237,.14);
+}
+
+.guest-stat-card b {
+  display: block;
+  font-size: 24px;
+  color: #7c3aed;
+  margin-bottom: 6px;
+}
+
+.guest-stat-card span {
+  display: block;
+  font-weight: 900;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.guest-stat-card p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.guest-profile-card {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255,255,255,.62);
+  border: 1px solid rgba(148,163,184,.22);
+  margin: 14px 0;
+}
+
+.guest-profile-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #fff;
+  font-weight: 900;
+  background: linear-gradient(135deg, #7c3aed, #0ea5e9);
+  box-shadow: 0 14px 30px rgba(124,58,237,.22);
+}
+
+.guest-profile-card h4 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: #111827;
+}
+
+.guest-profile-card p {
+  margin: 0;
+  color: #667085;
+  line-height: 1.7;
+  font-size: 14px;
+}
+
+.guest-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.guest-chip {
+  padding: 9px 13px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.72);
+  border: 1px solid rgba(148,163,184,.24);
+  color: #475467;
+  font-weight: 800;
+}
+
+.guest-mini-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.58);
+  border: 1px solid rgba(148,163,184,.20);
+}
+
+.guest-mini-card b {
+  display: block;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.guest-mini-card span {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.guest-history-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(124,58,237,.10), rgba(14,165,233,.10));
+  border: 1px solid rgba(124,58,237,.16);
+}
+
+.guest-history-card b {
+  display: block;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.guest-history-card span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.guest-history-card button {
+  white-space: nowrap;
+  background: linear-gradient(135deg, #7c3aed, #0ea5e9);
+  color: #fff;
+  border: none;
+}
+
+.guest-history-timeline {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.guest-history-timeline div {
+  position: relative;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.60);
+  border: 1px solid rgba(148,163,184,.20);
+}
+
+.guest-history-timeline i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #0ea5e9);
+  margin-bottom: 10px;
+}
+
+.guest-history-timeline span {
+  display: block;
+  font-weight: 900;
+  color: #111827;
+  margin-bottom: 5px;
+}
+
+.guest-history-timeline em {
+  font-style: normal;
+  color: #667085;
+  font-size: 12px;
+}
+
+@media(max-width:900px){
+  .guest-history-timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .guest-history-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
