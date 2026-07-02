@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.api.deps import get_current_user, get_current_user_optional, require_admin
 from app.core.config import get_settings
@@ -16,34 +16,70 @@ settings = get_settings()
 router = APIRouter(prefix="/ecosystem", tags=["模块四 · 阅读生态"])
 
 
-@router.get("/trial/{book_id}")
-def trial(book_id: int, db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
-    book = db.get(Book, book_id)
-    if not book or book.is_deleted:
-        raise HTTPException(404, "图书不存在")
-    book.trial_count += 1
-    if user:
-        db.add(RecommendationFeedback(user_id=user.id, book_id=book_id, event_type="trial", source="trial_reader"))
-    db.commit()
+def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dict:
+    if record:
+        book.trial_count += 1
+        if user:
+            db = object_session(book)
+            if db:
+                db.add(
+                    RecommendationFeedback(
+                        user_id=user.id,
+                        book_id=book.id,
+                        event_type="trial",
+                        source="trial_reader",
+                    )
+                )
+
+    allowed_pages = settings.TRIAL_PAGES_LOGIN if user else settings.TRIAL_PAGES_ANONYMOUS
     text = book.trial_text or book.description or "暂无试读内容。"
     chunks = [text[i:i + 560] for i in range(0, len(text), 560)] or ["暂无试读内容。"]
+    preview_chunks = chunks[:allowed_pages]
+
     return {
         "book": book_card(book),
         "logged_in": bool(user),
-        "allowed_pages": len(chunks),
+        "allowed_pages": allowed_pages,
         "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
         "pdf_url": book.ebook_pdf_url,
         "epub_url": book.ebook_epub_url,
-        "reader_url": f"/static/reader.html?book_id={book.id}&v=integrated-reader-3",
-        "total_preview_pages": len(chunks),
-        "pages": [{"page": i + 1, "content": c} for i, c in enumerate(chunks)],
-        "reader_features": ["PDF.js预览", "EPUB.js预览", "翻页", "缩放", "目录导航", "书签", "进度保存", "夜间模式"],
+        "reader_url": f"/static/reader.html?book_id={book.id}&record=0",
+        "total_preview_pages": len(preview_chunks),
+        "pages": [{"page": i + 1, "content": c} for i, c in enumerate(preview_chunks)],
+        "reader_features": [
+            "PDF.js预览",
+            "EPUB.js预览",
+            "翻页",
+            "缩放",
+            "目录导航",
+            "书签",
+            "进度保存",
+            "夜间模式",
+        ],
     }
+
+
+@router.get("/trial/{book_id}")
+def trial(
+    book_id: int,
+    record: bool = Query(True),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+):
+    book = db.get(Book, book_id)
+    if not book or book.is_deleted:
+        raise HTTPException(404, "图书不存在")
+    payload = _trial_payload(book, user, record=record)
+    db.commit()
+    return payload
 
 
 @router.get("/trial/{book_id}/content")
 def trial_content(book_id: int, page: int = Query(1, ge=1), db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
-    info = trial(book_id, db, user)
+    book = db.get(Book, book_id)
+    if not book or book.is_deleted:
+        raise HTTPException(404, "图书不存在")
+    info = _trial_payload(book, user, record=False)
     allowed_pages = info["allowed_pages"]
     if page > allowed_pages:
         raise HTTPException(403, "试读页数超过当前权限")
@@ -103,7 +139,10 @@ def edit_comment(comment_id: int, data: CommentUpdate, user: User = Depends(get_
         comment.content = data.content
     if data.rating is not None:
         comment.rating = data.rating
-    db.commit(); update_book_rating(db, comment.book_id)
+        from app.services.user_service import rate_book
+        rate_book(db, user, comment.book_id, data.rating)
+    db.commit()
+    update_book_rating(db, comment.book_id)
     return {"message": "评论已更新", "comment": comment_card(comment)}
 
 

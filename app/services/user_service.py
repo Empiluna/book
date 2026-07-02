@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, hash_password, is_email, validate_password_strength, verify_password
 from app.models import (
+    Author,
     Book,
     BookComment,
     Bookmark,
@@ -19,9 +20,12 @@ from app.models import (
     ReadingSession,
     RecommendationFeedback,
     SearchLog,
+    SemanticNode,
+    Tag,
     User,
     UserRating,
 )
+from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card, user_card
 
 DEFAULT_SHELVES = [("想读", "want_to_read"), ("在读", "reading"), ("已读", "read")]
@@ -230,6 +234,68 @@ def move_bookmark(db: Session, user: User, book_id: int, from_shelf: str, to_she
     return {"message": "图书已移动", "book_id": book_id, "from": from_shelf, "to": to_shelf}
 
 
+def _apply_search_interest(
+    db: Session,
+    searches: list[SearchLog],
+    mark,
+    tag_counter: Counter[str],
+    author_counter: Counter[str],
+    category_counter: Counter[str],
+) -> None:
+    if not searches:
+        return
+
+    tags = db.query(Tag).all()
+    authors = db.query(Author).all()
+    categories = [
+        x[0]
+        for x in db.query(Book.category)
+        .filter(Book.category.isnot(None))
+        .distinct()
+        .all()
+        if x[0]
+    ]
+    semantic_nodes = db.query(SemanticNode).all()
+    candidate_books = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
+
+    for idx, s in enumerate(searches[:20]):
+        keyword = (s.keyword or "").strip()
+        if not keyword:
+            continue
+
+        decay = max(0.45, 1.0 - idx * 0.035)
+        q = keyword.lower()
+
+        for tag in tags:
+            name = tag.name or ""
+            if name and (name.lower() in q or q in name.lower()):
+                tag_counter[name] += 0.8 * decay
+                if tag.category:
+                    category_counter[tag.category] += 0.35 * decay
+
+        for category in categories:
+            if category and (category.lower() in q or q in category.lower()):
+                category_counter[category] += 0.6 * decay
+
+        for author in authors:
+            name = author.name or ""
+            if name and (name.lower() in q or q in name.lower()):
+                author_counter[name] += 0.7 * decay
+
+        for node in semantic_nodes:
+            name = node.name or ""
+            if not name or not (name.lower() in q or q in name.lower()):
+                continue
+
+            if node.node_type == "Field":
+                category_counter[name] += 0.7 * decay
+            elif node.node_type in {"Keyword", "Topic"}:
+                tag_counter[name] += 0.5 * decay
+
+        for book, score in EmbeddingService.rank_books(keyword, candidate_books, limit=5, min_score=0.08):
+            mark(book, 0.6 * decay * max(float(score), 0.3))
+
+
 def build_user_profile(db: Session, user: User) -> dict[str, Any]:
     ratings = db.query(UserRating).filter_by(user_id=user.id).all()
     bookmarks = db.query(Bookmark).filter_by(user_id=user.id).all()
@@ -270,6 +336,21 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
             author_counter[author.name] += weight
         if book.category:
             category_counter[book.category] += weight
+
+    _apply_search_interest(db, searches, mark, tag_counter, author_counter, category_counter)
+
+    for book_id, weight in book_weights.items():
+        book = book_objects.get(book_id)
+        if not book:
+            continue
+
+        if weight < 1.0:
+            for tag in book.tags:
+                tag_counter[tag.name] += weight
+            for author in book.authors:
+                author_counter[author.name] += weight
+            if book.category:
+                category_counter[book.category] += weight
 
     max_tag = max(tag_counter.values()) if tag_counter else 1
     tag_preferences = [{"name": k, "weight": round(v / max_tag, 3)} for k, v in tag_counter.most_common(12)]

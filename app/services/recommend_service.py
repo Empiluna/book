@@ -11,7 +11,18 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import cache
 from app.core.config import get_settings
-from app.models import Book, BookComment, Bookmark, PurchaseClick, RecommendationFeedback, SystemConfig, User, UserRating
+from app.models import (
+    Book,
+    BookComment,
+    Bookmark,
+    PurchaseClick,
+    ReadingHistory,
+    ReadingProgress,
+    RecommendationFeedback,
+    SystemConfig,
+    User,
+    UserRating,
+)
 from app.services.graph_service import GraphService
 from app.services.serializers import book_card
 from app.services.user_service import build_user_profile
@@ -74,9 +85,38 @@ class RecommendService:
     def _excluded_book_ids(self, user: User | None) -> set[int]:
         if not user:
             return set()
-        ids = {r.book_id for r in self.db.query(UserRating).filter_by(user_id=user.id).all() if r.rating >= 4.5}
-        ids |= {h.book_id for h in user.histories if h.status == "read"}
-        ids |= {f.book_id for f in self.db.query(RecommendationFeedback).filter_by(user_id=user.id, event_type="not_interested").all()}
+
+        ids: set[int] = set()
+
+        ids |= {
+            r.book_id
+            for r in self.db.query(UserRating).filter_by(user_id=user.id).all()
+        }
+
+        ids |= {
+            b.book_id
+            for b in self.db.query(Bookmark).filter_by(user_id=user.id).all()
+        }
+
+        ids |= {
+            p.book_id
+            for p in self.db.query(ReadingProgress).filter_by(user_id=user.id).all()
+        }
+
+        ids |= {
+            h.book_id
+            for h in self.db.query(ReadingHistory)
+            .filter_by(user_id=user.id, status="read")
+            .all()
+        }
+
+        ids |= {
+            f.book_id
+            for f in self.db.query(RecommendationFeedback)
+            .filter_by(user_id=user.id, event_type="not_interested")
+            .all()
+        }
+
         return ids
 
     def hot_scores(self, limit: int = 50) -> list[dict]:

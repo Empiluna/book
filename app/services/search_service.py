@@ -330,10 +330,30 @@ class SearchService:
     def _search_sql(self, q: str | None, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None, record: bool = True) -> dict:
         query = self.db.query(Book).filter(Book.is_deleted == False)  # noqa: E712
         if q:
-            like = f"%{q}%"
-            query = query.outerjoin(Book.authors).outerjoin(Book.tags).outerjoin(Book.publisher).filter(
-                or_(Book.title.like(like), Book.subtitle.like(like), Book.description.like(like), Book.category.like(like), Book.isbn.like(like), Book.difficulty.like(like), Author.name.like(like), Tag.name.like(like), Publisher.name.like(like))
-            ).distinct()
+            terms = self._query_terms(q)
+            conditions = []
+
+            for term in terms:
+                like = f"%{term}%"
+                conditions.extend([
+                    Book.title.like(like),
+                    Book.subtitle.like(like),
+                    Book.description.like(like),
+                    Book.category.like(like),
+                    Book.isbn.like(like),
+                    Book.difficulty.like(like),
+                    Author.name.like(like),
+                    Tag.name.like(like),
+                    Publisher.name.like(like),
+                ])
+
+            query = (
+                query.outerjoin(Book.authors)
+                .outerjoin(Book.tags)
+                .outerjoin(Book.publisher)
+                .filter(or_(*conditions))
+                .distinct()
+            )
         if category:
             query = query.filter(Book.category == category)
         books = query.all()
@@ -378,6 +398,24 @@ class SearchService:
         if author:
             books = [b for b in books if author in [a.name for a in b.authors]]
         return books
+
+    @staticmethod
+    def _query_terms(q: str, max_terms: int = 16) -> list[str]:
+        raw = (q or "").strip()
+        terms: list[str] = []
+
+        if raw:
+            terms.append(raw)
+
+        for token in EmbeddingService.tokenize(raw):
+            token = token.strip()
+            if len(token) >= 2 and token not in terms:
+                terms.append(token)
+
+            if len(terms) >= max_terms:
+                break
+
+        return terms or [raw]
 
     @staticmethod
     def _local_keyword_score(q: str, book: Book) -> float:

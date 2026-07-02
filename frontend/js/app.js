@@ -601,11 +601,196 @@ async function adminRunCypher(){
   const cypher = $('adminCypher').value.trim(); if(!cypher) return toast('请填写 Cypher');
   $('adminGraphResult').textContent=adminJson(await api('/graph/admin/cypher', {method:'POST', body:JSON.stringify({cypher, params:{}})}));
 }
-function openAssistant(){ $('assistant').classList.toggle('hidden'); }
-async function sendChat(){
-  const input=$('chatInput'); const msg=input.value.trim(); if(!msg) return; input.value=''; const box=$('chatBox'); box.innerHTML+=`<div class="bubble user">${msg}</div>`;
-  const data=await api('/chat/send',{method:'POST', body:JSON.stringify({message:msg})});
-  box.innerHTML+=`<div class="bubble">${data.answer}${(data.books||[]).slice(0,3).map(b=>`<div class="mini-item" onclick="openDetail(${b.id||b.book_id})"><b>${b.title}</b><span>${b.reason||''}</span></div>`).join('')}</div>`; box.scrollTop=box.scrollHeight;
+function escapeHtml(value){
+  return String(value ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+let chatHistoryLocal = [];
+
+function assistantMarkdown(text){
+  return escapeHtml(text || '')
+    .replace(/\n{2,}/g,'</p><p>')
+    .replace(/\n/g,'<br>')
+    .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>');
+}
+function cleanAssistantAnswer(text){
+  let s = String(text || '').trim();
+  s = s.replace(
+    /^\s*(book_rec|book_qa|function_qa|personal_qa|admin_help|kg_assist|out_of_scope)\s*[·|｜\-]\s*(LLM增强|本地回答|本地规则回答|规则回答|fallback|LLM|local)\s*[·|｜\-]\s*(user|admin|anonymous|guest)\s*\n*/i,
+    ''
+  );
+  s = s.replace(/^\s*intent\s*[:：]\s*\w+\s*[,\n]\s*/i, '');
+  return s.trim();
+}
+function chatBookCards(books){
+  return (books || []).slice(0,4).map(b=>{
+    const id = b.id || b.book_id;
+    const authors = (b.authors || []).join('、') || b.author || '未知作者';
+    if(!id) return '';
+    return `
+      <button class="chat-book" onclick="openDetail(${id});closeAssistant();">
+        <span class="chat-book-title">${escapeHtml(b.title)}</span>
+        <span>${escapeHtml(authors)} · ⭐ ${escapeHtml(b.avg_rating || 0)}</span>
+        ${b.reason ? `<em>${escapeHtml(b.reason)}</em>` : ''}
+      </button>
+    `;
+  }).join('');
+}
+function chatSuggestionChips(suggestions){
+  return (suggestions || []).slice(0,4)
+    .map(x=>`<button class="chat-chip" onclick="quickAsk(decodeURIComponent('${encodeURIComponent(x)}'))">${escapeHtml(x)}</button>`)
+    .join('');
+}
+function openAssistant(){
+  const modal = $('assistantModal');
+  if(!modal) return;
+  modal.classList.remove('hidden');
+  renderChatMessages();
+  setTimeout(()=>{
+    const input = $('chatInput');
+    if(input){
+      autoResizeChatInput(input);
+      input.focus();
+    }
+  }, 80);
+}
+function closeAssistant(){
+  $('assistantModal')?.classList.add('hidden');
+}
+function closeAssistantOnBackdrop(event){
+  if(event.target && event.target.id === 'assistantModal'){
+    closeAssistant();
+  }
+}
+function quickAsk(text){
+  const input = $('chatInput');
+  if(!input) return;
+  input.value = text;
+  autoResizeChatInput(input);
+  sendChatMessage();
+}
+function handleChatKey(event){
+  if(event.key === 'Enter' && !event.shiftKey){
+    event.preventDefault();
+    sendChatMessage();
+  }
+}
+function autoResizeChatInput(el){
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 130) + 'px';
+}
+function renderChatWelcome(){
+  return `
+    <div class="chat-welcome">
+      <div class="chat-welcome-logo">KG</div>
+      <h2>你好，我是你的 AI 荐书助手</h2>
+      <p>你可以问我图书推荐、系统功能、阅读记录、购书方式和知识图谱相关问题。</p>
+      <div class="chat-suggestions">
+        ${chatSuggestionChips(['推荐几本适合人工智能入门的书','我喜欢《三体》，还能看什么','怎么看我的阅读进度','怎么购买实体书'])}
+      </div>
+    </div>
+  `;
+}
+function renderChatMessages(){
+  const box = $('chatMessages');
+  if(!box) return;
+
+  if(chatHistoryLocal.length === 0){
+    box.innerHTML = renderChatWelcome();
+    return;
+  }
+
+  box.innerHTML = chatHistoryLocal.map(msg=>{
+    if(msg.role === 'user'){
+      return `
+        <div class="chat-row user">
+          <div class="chat-bubble user">${assistantMarkdown(msg.content)}</div>
+          <div class="chat-avatar user">我</div>
+        </div>
+      `;
+    }
+    const body = msg.loading
+      ? '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>'
+      : `<div>${assistantMarkdown(msg.content)}</div>`;
+    return `
+      <div class="chat-row ai">
+        <div class="chat-avatar ai">AI</div>
+        <div class="chat-bubble ai">
+          ${body}
+          ${chatBookCards(msg.books)}
+          ${msg.suggestions?.length ? `<div class="chat-suggestions">${chatSuggestionChips(msg.suggestions)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  box.scrollTop = box.scrollHeight;
+}
+function clearAssistant(){
+  chatHistoryLocal = [];
+  renderChatMessages();
+}
+async function sendChatMessage(){
+  const input = $('chatInput');
+  if(!input) return;
+
+  const message = input.value.trim();
+  if(!message) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  chatHistoryLocal.push({role:'user', content:message});
+  chatHistoryLocal.push({
+    role:'assistant',
+    content:'正在检索图书库、用户画像和知识图谱',
+    loading:true
+  });
+  renderChatMessages();
+
+  try{
+    const data = await api('/chat/send', {
+      method:'POST',
+      body:JSON.stringify({message})
+    });
+    const rawAnswer =
+      data.answer ||
+      data.reply ||
+      data.response ||
+      data.content ||
+      data.message ||
+      '暂时没有生成回答。';
+    chatHistoryLocal[chatHistoryLocal.length - 1] = {
+      role:'assistant',
+      content:cleanAssistantAnswer(rawAnswer),
+      books:data.books || [],
+      suggestions:data.suggestions || []
+    };
+  }catch(e){
+    chatHistoryLocal[chatHistoryLocal.length - 1] = {
+      role:'assistant',
+      content:cleanAssistantAnswer(e.message || '抱歉，智能助手暂时无法连接。请检查后端服务或 AI 问答接口是否正常。'),
+      suggestions:['推荐几本人工智能入门书','怎么购买实体书？']
+    };
+  }
+
+  renderChatMessages();
+}
+function sendChat(){
+  return sendChatMessage();
+}
+function openAssistantLegacy(){
+  const modal = $('assistantModal');
+  if(modal){
+    openAssistant();
+  }else if($('assistant')){
+    $('assistant').classList.toggle('hidden');
+    setTimeout(()=>$('chatInput')?.focus(), 80);
+  }
 }
 function updateSearchbarForView(view){ if($('topSearchbar')) $('topSearchbar').style.display = ['home','discover'].includes(view) ? 'flex' : 'none'; }
 async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile()]); }
@@ -637,4 +822,5 @@ $('loginBtn').onclick=()=>{ window.location.href = '/login?mode=login&role=user'
 $('adminBtn').onclick=()=>{ window.location.href = '/admin'; };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
+renderChatMessages();
 updateUserBadge(); updateSearchbarForView('home'); loadAll();
