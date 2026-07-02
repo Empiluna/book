@@ -12,8 +12,10 @@
     .title{min-width:0}.title h1{margin:0 0 5px;font-size:18px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{display:flex;align-items:center;gap:10px;color:#64748b;font-size:12px}.progress{width:180px;height:7px;overflow:hidden;border-radius:999px;background:#e2e8f0}.progress div{height:100%;width:0;background:linear-gradient(90deg,#4f46e5,#06b6d4)}
     .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
     button{border:0;border-radius:12px;padding:9px 12px;background:#312e81;color:#fff;font-weight:800;cursor:pointer;line-height:1}button:hover{filter:brightness(1.06)}button:disabled{opacity:.45;cursor:not-allowed}.ghost{background:#e2e8f0;color:#334155}.pagebox{display:flex;align-items:center;gap:6px;color:#475569;font-size:13px}.pagebox input{width:56px;height:34px;border:1px solid #cbd5e1;border-radius:10px;text-align:center;font-weight:800;background:white;color:#17202a}.zoom{min-width:54px;text-align:center;color:#475569;font-size:13px;font-weight:800}
-    .stage{min-height:0;overflow:auto;padding:24px;background:radial-gradient(circle at 15% 5%,#dbeafe,transparent 34%),radial-gradient(circle at 86% 12%,#ede9fe,transparent 30%),#f8fafc;scroll-behavior:smooth}
-    .pdf-pages{display:grid;gap:18px;justify-items:center}.pdf-page{max-width:100%;background:white;box-shadow:0 18px 46px rgba(15,23,42,.16)}canvas{display:block;max-width:100%;height:auto;background:white}.epubbox{width:min(980px,100%);margin:0 auto;border:1px solid #e5e7eb;border-radius:18px;background:white;overflow:auto;box-shadow:0 18px 46px rgba(15,23,42,.14)}.text-pages{max-width:860px;margin:0 auto;display:grid;gap:16px;padding-bottom:60px}.text-page{padding:34px 42px;border-radius:18px;background:#fffaf0;border:1px solid rgba(120,113,108,.16);font-size:18px;line-height:1.9;box-shadow:0 16px 38px rgba(15,23,42,.08);scroll-margin-top:24px}.text-page b{display:block;margin-bottom:12px}.hint{max-width:760px;margin:60px auto;padding:22px;border-radius:18px;background:white;color:#64748b;line-height:1.7;box-shadow:0 16px 38px rgba(15,23,42,.08)}
+    .stage{min-height:0;overflow:auto;padding:24px;background:radial-gradient(circle at 15% 5%,#dbeafe,transparent 34%),radial-gradient(circle at 86% 12%,#ede9fe,transparent 30%),#f8fafc}
+    .pdf-pages{display:grid;gap:18px;justify-items:center}.pdf-page{max-width:100%;background:white;box-shadow:0 18px 46px rgba(15,23,42,.16);scroll-margin-top:24px}canvas{display:block;max-width:100%;height:auto;background:white}.pdf-placeholder{min-height:300px;display:grid;place-items:center;color:#94a3b8;font-size:14px;background:white;border-radius:4px}
+    .epubbox{width:min(980px,100%);margin:0 auto;border:1px solid #e5e7eb;border-radius:18px;background:white;overflow:auto;box-shadow:0 18px 46px rgba(15,23,42,.14)}
+    .text-pages{max-width:860px;margin:0 auto;display:grid;gap:16px;padding-bottom:60px}.text-page{padding:34px 42px;border-radius:18px;background:#fffaf0;border:1px solid rgba(120,113,108,.16);font-size:18px;line-height:1.9;box-shadow:0 16px 38px rgba(15,23,42,.08);scroll-margin-top:24px}.text-page b{display:block;margin-bottom:12px}.hint{max-width:760px;margin:60px auto;padding:22px;border-radius:18px;background:white;color:#64748b;line-height:1.7;box-shadow:0 16px 38px rgba(15,23,42,.08)}
     .night{background:#020617;color:#e2e8f0}.night .toolbar{background:rgba(15,23,42,.94);border-color:#1e293b}.night .stage{background:#020617}.night .pdf-page,.night .epubbox{filter:invert(.92) hue-rotate(180deg);box-shadow:none}.night .text-page{background:#111827;color:#f8fafc;border-color:#334155}.night .pagebox input{background:#0f172a;color:#e2e8f0;border-color:#334155}.night .ghost{background:#1e293b;color:#e2e8f0}
     @media(max-width:760px){body{overflow:auto}.reader{height:auto;min-height:100vh}.toolbar{height:auto;grid-template-columns:1fr;padding:12px}.tools{justify-content:flex-start}.stage{height:calc(100vh - 140px);padding:12px}.progress{width:120px}.text-page{padding:24px;font-size:16px}}
   </style>
@@ -30,7 +32,7 @@
         <div class="pagebox"><input id="pageInput" value="1" inputmode="numeric" onkeydown="if(event.key==='Enter')goPage()"> / <span id="pageTotal">-</span></div>
         <button id="nextBtn" onclick="nextPage()">下一页</button>
         <button onclick="zoomOut()">缩小</button>
-        <span id="zoomLabel" class="zoom">适宽</span>
+        <span id="zoomLabel" class="zoom">300%</span>
         <button onclick="zoomIn()">放大</button>
         <button class="ghost" onclick="fitWidth()">适宽</button>
         <button class="ghost" onclick="toggleNight()">夜间</button>
@@ -49,462 +51,311 @@
     const recordFlag = params.get('record');
     const token = localStorage.getItem('token') || '';
 
-    let trial = null;
-    let mode = 'text';
-    let page = 1;
-    let pageTotal = 1;
-    let pdfDoc = null;
-    let pdfUrl = null;
-    let scale = 3;
-    let fitMode = false;
-    let rendition = null;
-    let epubBook = null;
-    let epubFont = 100;
-    let observer = null;
-    let scrollTick = false;
+    let trial = null, mode = 'text', page = 1, pageTotal = 1;
+    let pdfDoc = null, pdfUrl = null, scale = 3, fitMode = false, dpr = 1;
+    let rendition = null, epubBook = null, epubFont = 100;
+    let scrollTimer = null, userScrolling = false;
 
     const $ = id => document.getElementById(id);
 
     function headers(){
-      return token
-        ? {'Authorization':'Bearer ' + token, 'Content-Type':'application/json'}
-        : {'Content-Type':'application/json'};
+      return token ? {'Authorization':'Bearer '+token, 'Content-Type':'application/json'} : {'Content-Type':'application/json'};
     }
-
-    async function api(path, opts = {}){
-      const r = await fetch(API + path, {headers: headers(), ...opts});
+    async function api(path, opts={}){
+      const r = await fetch(API+path, {headers:headers(), ...opts});
       if(!r.ok) throw new Error(await r.text());
       return r.json();
     }
-
-    function absUrl(url){
-      return new URL(url, location.origin).href;
-    }
-
-    function allowed(){
-      return Math.max(1, trial?.allowed_pages || 99999);
-    }
-
-    function progress(){
-      return Math.min(100, Math.max(1, Math.round(page / pageTotal * 100)));
-    }
+    function absUrl(url){ return new URL(url, location.origin).href; }
+    function allowed(){ return Math.max(1, trial?.allowed_pages || 99999); }
+    function progress(){ return pageTotal>0 ? Math.min(100, Math.max(1, Math.round(page/pageTotal*100))) : 0; }
 
     function updateUi(){
       $('pageInput').value = page;
       $('pageTotal').textContent = pageTotal;
-      $('prog').style.width = progress() + '%';
-      $('meta').textContent = `${mode.toUpperCase()} · 第 ${page} 页 / 共 ${pageTotal} 页`;
-      $('zoomLabel').textContent = mode === 'pdf'
-        ? (fitMode ? '适宽' : Math.round(scale * 100) + '%')
-        : (mode === 'epub' ? epubFont + '%' : '正文');
+      $('prog').style.width = progress()+'%';
+      $('meta').textContent = mode.toUpperCase()+' · 第 '+page+' 页 / 共 '+pageTotal+' 页';
+      $('zoomLabel').textContent = mode==='pdf' ? (fitMode?'适宽':Math.round(scale*100)+'%') : (mode==='epub'?epubFont+'%':'正文');
       $('prevBtn').disabled = page <= 1;
       $('nextBtn').disabled = page >= pageTotal;
     }
 
-    // ── Scroll-based page detection ──
-    function setupScrollTracking(){
-      if(observer) observer.disconnect();
-      const stage = $('stage');
-
-      if(mode === 'text'){
-        // IntersectionObserver: which .text-page is most visible
-        const pages = stage.querySelectorAll('.text-page');
-        if(!pages.length) return;
-        observer = new IntersectionObserver(entries => {
-          let best = null, bestRatio = 0;
-          entries.forEach(e => {
-            if(e.intersectionRatio > bestRatio){ bestRatio = e.intersectionRatio; best = e.target; }
+    // ── Simple scroll-based page detection ──
+    function onUserScroll(){
+      if(scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        const stage = $('stage');
+        const st = stage.scrollTop, sh = stage.clientHeight;
+        if(mode==='text'){
+          const pages = stage.querySelectorAll('.text-page');
+          let best = 1, bestDist = Infinity;
+          pages.forEach((el,i) => {
+            const dist = Math.abs(el.offsetTop - st - sh*0.3);
+            if(dist < bestDist){ bestDist = dist; best = i+1; }
           });
-          if(best){
-            const idx = Array.from(pages).indexOf(best);
-            if(idx >= 0 && idx + 1 !== page){ page = idx + 1; updateUi(); }
-          }
-        }, {root: stage, threshold: [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1]});
-        pages.forEach(p => observer.observe(p));
-      }else if(mode === 'pdf'){
-        // Scroll-based for stacked PDF pages
-        const canvasWraps = stage.querySelectorAll('.pdf-page');
-        if(!canvasWraps.length) return;
-        observer = new IntersectionObserver(entries => {
-          let best = null, bestRatio = 0;
-          entries.forEach(e => {
-            if(e.intersectionRatio > bestRatio){ bestRatio = e.intersectionRatio; best = e.target; }
+          if(best !== page){ page = best; updateUi(); }
+        }else if(mode==='pdf'){
+          renderNearbyPdfPages();
+          const pages = stage.querySelectorAll('.pdf-page');
+          let best = 1, bestDist = Infinity;
+          pages.forEach((el,i) => {
+            const dist = Math.abs(el.offsetTop - st - sh*0.3);
+            if(dist < bestDist){ bestDist = dist; best = i+1; }
           });
-          if(best){
-            const idx = Array.from(canvasWraps).indexOf(best);
-            if(idx >= 0 && idx + 1 !== page){ page = idx + 1; updateUi(); }
-          }
-        }, {root: stage, threshold: [0, 0.15, 0.3, 0.5, 0.7]});
-        canvasWraps.forEach(p => observer.observe(p));
-      }
+          if(best !== page){ page = best; updateUi(); }
+        }
+        scrollTimer = null;
+      }, 300);
     }
 
     // ── Init ──
     async function init(){
       try{
-        const trialPath = '/ecosystem/trial/' + bookId + (recordFlag === '0' ? '?record=0' : '');
-        trial = await api(trialPath);
-
+        trial = await api('/ecosystem/trial/'+bookId+(recordFlag==='0'?'?record=0':''));
         $('title').textContent = trial.book.title + ' · 在线阅读';
         mode = trial.content_type;
-
-        if(mode === 'pdf' && trial.pdf_url) return loadPdf(trial.pdf_url);
-        if(mode === 'epub' && trial.epub_url) return loadEpub(trial.epub_url);
-
+        if(mode==='pdf' && trial.pdf_url) return await loadPdf(trial.pdf_url);
+        if(mode==='epub' && trial.epub_url) return await loadEpub(trial.epub_url);
         renderText();
       }catch(e){
-        $('stage').innerHTML = `<div class="hint">阅读信息加载失败：${e.message}</div>`;
+        $('stage').innerHTML = '<div class="hint">加载失败：'+e.message+'</div>';
       }
     }
 
-    // ── PDF: lazy-render pages on scroll ──
-    async function loadPdf(url){
-      pdfUrl = absUrl(url);
-      page = 1;
-      mode = 'pdf';
-      try {
-        $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages"><div class="hint">PDF 加载中...</div></div>';
+    // ── Text ──
+    function renderText(){
+      mode='text'; page=1;
+      const pages = trial.pages || [];
+      pageTotal = pages.length || 1;
+      $('stage').innerHTML = '<div class="text-pages">'+pages.map(p =>
+        '<section class="text-page" data-page="'+p.page+'" id="tp'+p.page+'"><b>第 '+p.page+' 页</b><p>'+p.content+'</p></section>'
+      ).join('')+'</div>';
+      if(!$('stage')._hasScrollListener){
+        $('stage')._hasScrollListener = true;
+        $('stage').addEventListener('scroll', onUserScroll, {passive:true});
+      }
+      updateUi();
+    }
 
+    // ── PDF: render pages lazily ──
+    async function loadPdf(url){
+      pdfUrl = absUrl(url); mode='pdf'; page=1;
+      $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages"><div class="hint">PDF 加载中...</div></div>';
+      try {
         const pdfjsLib = await import('/static/vendor/pdf.min.mjs?v=4.10.38');
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/vendor/pdf.worker.min.mjs?v=4.10.38';
-
-        pdfDoc = await pdfjsLib.getDocument({url: pdfUrl}).promise;
+        pdfDoc = await pdfjsLib.getDocument({url:pdfUrl}).promise;
         pageTotal = Math.min(pdfDoc.numPages, allowed());
-
-        const host = $('stage');
-        const available = Math.max(320, host.clientWidth - 48);
+        dpr = Math.min(window.devicePixelRatio||1, 2);
 
         if(fitMode){
-          const firstPage = await pdfDoc.getPage(1);
-          const base = firstPage.getViewport({scale:1});
-          scale = Math.min(3.2, Math.max(.8, available / base.width));
+          const fp = await pdfDoc.getPage(1);
+          const host = $('stage');
+          const avail = Math.max(320, host.clientWidth-48);
+          scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
         }
-
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const container = document.createElement('div');
-        container.id = 'pdfPages';
-        container.className = 'pdf-pages';
 
         // Create placeholders for all pages
-        for(let i = 1; i <= pageTotal; i++){
-          const wrap = document.createElement('div');
-          wrap.className = 'pdf-page pdf-placeholder';
-          wrap.dataset.page = i;
-          wrap.style.scrollMarginTop = '24px';
-          wrap.style.minHeight = '300px';
-          wrap.style.display = 'grid';
-          wrap.style.placeItems = 'center';
-          wrap.style.color = '#94a3b8';
-          wrap.style.fontSize = '14px';
-          wrap.textContent = '第 ' + i + ' 页';
-          container.appendChild(wrap);
+        let html = '';
+        for(let i=1; i<=pageTotal; i++){
+          html += '<div class="pdf-page pdf-placeholder" data-page="'+i+'">第 '+i+' 页</div>';
         }
-
-        $('stage').replaceChildren(container);
-        $('pageTotal').textContent = pageTotal;
-        $('meta').textContent = 'PDF · 共 ' + pageTotal + ' 页 · 滚动加载';
-
+        $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages">'+html+'</div>';
         updateUi();
-        lazyRenderPdfPages(dpr, available);
-        setupScrollTracking();
-        $('stage').scrollTop = 0;
+
+        // Render first pages immediately
+        await renderNearbyPdfPages();
       } catch(e) {
-        $('stage').innerHTML = '<div class="hint">PDF 加载失败：' + e.message + '<br><small>URL: ' + pdfUrl + '</small></div>';
+        $('stage').innerHTML = '<div class="hint">PDF 加载失败：'+e.message+'<br><small>'+pdfUrl+'</small></div>';
       }
     }
 
-    async function lazyRenderPdfPages(dpr, available){
-      const container = $('pdfPages');
-      if(!container || !pdfDoc) return;
+    async function renderOnePdfPage(el){
+      const pn = parseInt(el.dataset.page);
+      try {
+        const pdfPage = await pdfDoc.getPage(pn);
+        const host = $('stage');
+        const avail = Math.max(320, host.clientWidth-48);
+        const viewport = pdfPage.getViewport({scale});
+        const dw = fitMode ? Math.min(1120, avail) : viewport.width;
+        const dh = viewport.height * (dw/viewport.width);
 
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width*dpr);
+        canvas.height = Math.floor(viewport.height*dpr);
+        canvas.style.width = Math.floor(dw)+'px';
+        canvas.style.height = Math.floor(dh)+'px';
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        await pdfPage.render({canvasContext:ctx, viewport}).promise;
+
+        el.classList.remove('pdf-placeholder');
+        el.innerHTML = '';
+        el.appendChild(canvas);
+        return true;
+      } catch(e) { el.textContent = '渲染失败'; return false; }
+    }
+
+    async function renderNearbyPdfPages(){
+      if(!pdfDoc) return;
       const stage = $('stage');
-      const lookAhead = 5; // render pages within 5 viewport-heights ahead
-
-      function getUnrenderedNearby(){
-        const unrendered = container.querySelectorAll('.pdf-placeholder');
-        const result = [];
-        const stageTop = stage.scrollTop;
-        const stageBottom = stageTop + stage.clientHeight * (lookAhead + 1);
-
-        for(const el of unrendered){
-          const elTop = el.offsetTop;
-          if(elTop < stageBottom && elTop + 300 > stageTop){
-            result.push(parseInt(el.dataset.page));
-            if(result.length >= 6) break; // max 6 at a time
-          }
-        }
-        return result;
-      }
-
-      async function renderPageAt(containerEl, pageNum){
-        try {
-          const pdfPage = await pdfDoc.getPage(pageNum);
-          const viewport = pdfPage.getViewport({scale});
-          const displayWidth = fitMode ? Math.min(1120, available) : viewport.width;
-          const displayHeight = viewport.height * (displayWidth / viewport.width);
-
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.floor(viewport.width * dpr);
-          canvas.height = Math.floor(viewport.height * dpr);
-          canvas.style.width = Math.floor(displayWidth) + 'px';
-          canvas.style.height = Math.floor(displayHeight) + 'px';
-
-          const ctx = canvas.getContext('2d');
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          await pdfPage.render({canvasContext: ctx, viewport}).promise;
-
-          containerEl.classList.remove('pdf-placeholder');
-          containerEl.textContent = '';
-          containerEl.style.minHeight = '';
-          containerEl.style.display = '';
-          containerEl.style.placeItems = '';
-          containerEl.style.color = '';
-          containerEl.style.fontSize = '';
-          containerEl.appendChild(canvas);
-          $('meta').textContent = 'PDF · ' + pageTotal + ' 页 · 已渲染 ' + container.querySelectorAll('.pdf-page:not(.pdf-placeholder)').length + '/' + pageTotal;
-        } catch(e) {
-          containerEl.textContent = '渲染失败: ' + e.message;
+      const st = stage.scrollTop, sh = stage.clientHeight;
+      const margin = sh * 2;
+      const placeholders = stage.querySelectorAll('.pdf-placeholder');
+      const toRender = [];
+      for(const el of placeholders){
+        const ot = el.offsetTop;
+        if(ot > st - margin && ot < st + sh + margin){
+          toRender.push(el);
+          if(toRender.length >= 8) break;
         }
       }
-
-      async function renderBatch(){
-        const pages = getUnrenderedNearby();
-        if(!pages.length) return;
-
-        const containerEls = pages.map(p => container.querySelector('.pdf-placeholder[data-page="' + p + '"]')).filter(Boolean);
-
-        // Render in small batches
-        for(let i = 0; i < containerEls.length; i += 3){
-          const batch = containerEls.slice(i, i + 3);
-          await Promise.all(batch.map((el, idx) => renderPageAt(el, pages[i + idx])));
-        }
-
-        // Update observer for newly rendered pages
-        setupScrollTracking();
+      if(!toRender.length) return;
+      // Render in batches of 3
+      for(let i=0; i<toRender.length; i+=3){
+        await Promise.all(toRender.slice(i,i+3).map(renderOnePdfPage));
       }
-
-      // Initial render: first 6 pages
-      const firstPages = [];
-      for(let i = 1; i <= Math.min(6, pageTotal); i++){
-        const el = container.querySelector('.pdf-placeholder[data-page="' + i + '"]');
-        if(el) firstPages.push(el);
-      }
-      for(let i = 0; i < firstPages.length; i += 3){
-        const batch = firstPages.slice(i, i + 3);
-        await Promise.all(batch.map((el, idx) => renderPageAt(el, i + idx + 1)));
-      }
-      setupScrollTracking();
-
-      // Scroll-based lazy loading
-      let renderTimer = null;
-      $('stage').addEventListener('scroll', () => {
-        if(renderTimer) return;
-        renderTimer = setTimeout(async () => {
-          await renderBatch();
-          renderTimer = null;
-        }, 200);
-      }, {passive: true});
-
-      // Also observe placeholders with IntersectionObserver
-      const lazyObserver = new IntersectionObserver(async (entries) => {
-        const visible = entries.filter(e => e.isIntersecting).map(e => parseInt(e.target.dataset.page));
-        if(!visible.length) return;
-        const els = visible.map(p => container.querySelector('.pdf-placeholder[data-page="' + p + '"]')).filter(Boolean);
-        for(let i = 0; i < els.length; i += 3){
-          await Promise.all(els.slice(i, i + 3).map((el, idx) => {
-            const pn = visible[i + idx];
-            return renderPageAt(el, pn);
-          }));
-        }
-        setupScrollTracking();
-      }, {root: stage, rootMargin: '600px'});
-
-      // Observe all remaining placeholders
-      container.querySelectorAll('.pdf-placeholder').forEach(el => lazyObserver.observe(el));
+      const rendered = stage.querySelectorAll('.pdf-page:not(.pdf-placeholder)').length;
+      $('meta').textContent = 'PDF · '+pageTotal+' 页 · 已渲染 '+rendered+'/'+pageTotal;
     }
 
-    // ── EPUB: scrolled-doc flow ──
+    // Quick rescale for zoom (clear canvases, re-render visible)
+    async function quickReloadPdf(){
+      if(!pdfDoc) return;
+      const stage = $('stage');
+      const all = stage.querySelectorAll('.pdf-page');
+      all.forEach(el => { el.innerHTML = ''; el.classList.add('pdf-placeholder'); el.textContent = '第 '+el.dataset.page+' 页'; });
+      updateUi();
+      await renderNearbyPdfPages();
+    }
+
+    // ── EPUB ──
     async function loadEpub(url){
-      mode = 'epub';
-      page = 1;
-      pageTotal = allowed();
-
+      mode='epub'; page=1; pageTotal=allowed();
       $('stage').innerHTML = '<div id="epub" class="epubbox" style="height:calc(100vh - 122px)"><div class="hint">EPUB 加载中...</div></div>';
-
       const res = await fetch(absUrl(url));
-      if(!res.ok) throw new Error('EPUB文件读取失败：' + res.status);
-
+      if(!res.ok) throw new Error('EPUB读取失败：'+res.status);
       epubBook = ePub(await res.arrayBuffer(), {openAs:'binary'});
-      rendition = epubBook.renderTo('epub', {
-        width:'100%',
-        height:'100%',
-        flow:'scrolled-doc',
-        manager:'default'
-      });
-
-      rendition.themes.default({
-        body:{'font-size':epubFont + '%', 'line-height':'1.75'},
-        p:{'line-height':'1.75'}
-      });
-
+      rendition = epubBook.renderTo('epub', {width:'100%', height:'100%', flow:'scrolled-doc', manager:'default'});
+      rendition.themes.default({body:{'font-size':epubFont+'%', 'line-height':'1.75'}, p:{'line-height':'1.75'}});
       await rendition.display();
       document.querySelector('#epub > .hint')?.remove();
 
-      // EPUB scrolled mode: track scroll position for page estimate
-      const epubEl = () => document.getElementById('epub');
       rendition.on('relocated', loc => {
         const total = epubBook.locations.total || pageTotal;
         pageTotal = Math.min(total, allowed());
-        page = Math.min(pageTotal, (loc.start.index || 0) + 1);
+        page = Math.min(pageTotal, (loc.start.index||0)+1);
         updateUi();
       });
 
-      // Scroll tracking for EPUB container
-      const epubContainer = document.getElementById('epub');
-      if(epubContainer){
-        epubContainer.addEventListener('scroll', () => {
-          if(!scrollTick){
-            requestAnimationFrame(() => {
-              const el = epubContainer;
-              if(!el) return;
-              const ratio = (el.scrollTop + el.clientHeight) / el.scrollHeight;
-              const estimatedPage = Math.max(1, Math.min(pageTotal, Math.ceil(ratio * pageTotal)));
-              if(estimatedPage !== page){ page = estimatedPage; updateUi(); }
-              scrollTick = false;
-            });
-            scrollTick = true;
-          }
+      // EPUB scroll tracking
+      const epubEl = document.getElementById('epub');
+      if(epubEl){
+        epubEl.addEventListener('scroll', () => {
+          if(scrollTimer) clearTimeout(scrollTimer);
+          scrollTimer = setTimeout(() => {
+            const ratio = (epubEl.scrollTop+epubEl.clientHeight)/epubEl.scrollHeight;
+            const est = Math.max(1, Math.min(pageTotal, Math.ceil(ratio*pageTotal)));
+            if(est !== page){ page = est; updateUi(); }
+          }, 300);
         }, {passive:true});
       }
-
       updateUi();
     }
 
-    // ── Text: all pages rendered, scroll naturally ──
-    function renderText(){
-      mode = 'text';
-      page = 1;
-      const pages = trial.pages || [];
-      pageTotal = pages.length || 1;
-
-      $('stage').innerHTML = '<div class="text-pages">' + pages.map((p, i) =>
-        `<section class="text-page" data-page="${p.page}" id="tp${p.page}"><b>第 ${p.page} 页</b><p>${p.content}</p></section>`
-      ).join('') + '</div>';
-
-      updateUi();
-      setupScrollTracking();
+    // ── Navigation (manual scrollTop to avoid parent scroll propagation) ──
+    function scrollToPage(p){
+      const stage = $('stage');
+      if(mode==='pdf'){
+        const el = document.querySelector('.pdf-page[data-page="'+p+'"]');
+        if(el) stage.scrollTop = el.offsetTop - 24;
+      }else if(mode==='text'){
+        const el = $('tp'+p);
+        if(el) stage.scrollTop = el.offsetTop - 24;
+      }
+      // Also add scroll listener back for manual scroll tracking
+      if(!stage._hasScrollListener){
+        stage._hasScrollListener = true;
+        stage.addEventListener('scroll', onUserScroll, {passive:true});
+      }
     }
 
-    // ── Navigation ──
-    async function goPage(){
-      const next = Math.min(pageTotal, Math.max(1, Number($('pageInput').value) || 1));
+    function goPage(){
+      const next = Math.min(pageTotal, Math.max(1, Number($('pageInput').value)||1));
       page = next;
-
-      if(mode === 'pdf'){
-        const el = document.querySelector(`.pdf-page[data-page="${page}"]`);
-        if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-      }else if(mode === 'epub' && rendition){
-        await rendition.display(next - 1);
-      }else{
-        const el = $('tp' + page);
-        if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-      }
-
+      if(mode==='epub' && rendition){ rendition.display(next-1); }
+      else { scrollToPage(next); }
       updateUi();
     }
 
-    async function nextPage(){
+    function nextPage(){
       if(page >= pageTotal) return;
-
-      if(mode === 'pdf'){
-        page++;
-        const el = document.querySelector(`.pdf-page[data-page="${page}"]`);
-        if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-      }else if(mode === 'epub' && rendition){
-        rendition.next();
-      }else{
-        page++;
-        const el = $('tp' + page);
-        if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-      }
-
+      page++;
+      if(mode==='epub' && rendition){ rendition.next(); }
+      else { scrollToPage(page); }
       updateUi();
     }
 
-    async function prevPage(){
+    function prevPage(){
       if(page <= 1) return;
-
-      if(mode === 'pdf'){
-        page--;
-        const el = document.querySelector(`.pdf-page[data-page="${page}"]`);
-        if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-      }else if(mode === 'epub' && rendition){
-        rendition.prev();
-      }else{
-        page--;
-        const el = $('tp' + page);
-        if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-      }
-
+      page--;
+      if(mode==='epub' && rendition){ rendition.prev(); }
+      else { scrollToPage(page); }
       updateUi();
     }
 
     // ── Zoom ──
     async function zoomIn(){
-      if(mode === 'pdf'){
-        fitMode = false;
-        scale = Math.min(scale + .15, 3);
-        // Re-render all PDF pages
-        if(pdfDoc){ page = 1; await loadPdf(pdfUrl); }
-      }else if(mode === 'epub' && rendition){
-        epubFont = Math.min(epubFont + 10, 160);
-        rendition.themes.fontSize(epubFont + '%');
-        updateUi();
+      if(mode==='pdf'){
+        fitMode = false; scale = Math.min(scale+0.25, 4);
+        if(pdfDoc){ page=1; await quickReloadPdf(); $('stage').scrollTop=0; }
+      }else if(mode==='epub' && rendition){
+        epubFont = Math.min(epubFont+10, 160);
+        rendition.themes.fontSize(epubFont+'%');
       }
+      updateUi();
     }
-
     async function zoomOut(){
-      if(mode === 'pdf'){
-        fitMode = false;
-        scale = Math.max(scale - .15, .45);
-        if(pdfDoc){ page = 1; await loadPdf(pdfUrl); }
-      }else if(mode === 'epub' && rendition){
-        epubFont = Math.max(epubFont - 10, 70);
-        rendition.themes.fontSize(epubFont + '%');
+      if(mode==='pdf'){
+        fitMode = false; scale = Math.max(scale-0.25, 0.5);
+        if(pdfDoc){ page=1; await quickReloadPdf(); $('stage').scrollTop=0; }
+      }else if(mode==='epub' && rendition){
+        epubFont = Math.max(epubFont-10, 70);
+        rendition.themes.fontSize(epubFont+'%');
+      }
+      updateUi();
+    }
+    async function fitWidth(){
+      if(mode==='pdf'){
+        fitMode = true;
+        const host = $('stage');
+        const avail = Math.max(320, host.clientWidth-48);
+        const fp = await pdfDoc.getPage(1);
+        scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
+        if(pdfDoc){ page=1; await quickReloadPdf(); $('stage').scrollTop=0; }
         updateUi();
       }
     }
 
-    async function fitWidth(){
-      if(mode === 'pdf'){
-        fitMode = true;
-        if(pdfDoc){ page = 1; await loadPdf(pdfUrl); }
-      }
-    }
-
-    function toggleNight(){
-      document.body.classList.toggle('night');
-    }
+    function toggleNight(){ document.body.classList.toggle('night'); }
 
     async function saveProgress(){
-      try{
-        await api('/user/progress/' + bookId, {
-          method:'POST',
-          body:JSON.stringify({
-            current_page:page,
-            progress_percent:progress(),
-            reading_minutes:12,
-            last_device:'Web Reader'
-          })
-        });
-        alert('阅读进度已保存：' + progress() + '%');
-      }catch(e){
-        alert('请先登录后保存进度');
-      }
+      try {
+        await api('/user/progress/'+bookId, {method:'POST', body:JSON.stringify({current_page:page, progress_percent:progress(), reading_minutes:12, last_device:'Web Reader'})});
+        alert('阅读进度已保存：'+progress()+'%');
+      } catch(e) { alert('请先登录后保存进度'); }
     }
 
+    // Resize handler for PDF
     window.addEventListener('resize', () => {
-      if(mode === 'pdf' && fitMode) { page = 1; loadPdf(pdfUrl); }
+      if(mode==='pdf' && fitMode && pdfDoc){
+        const host = $('stage');
+        const avail = Math.max(320, host.clientWidth-48);
+        pdfDoc.getPage(1).then(fp => {
+          scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
+          quickReloadPdf();
+        });
+      }
     });
 
     init();
