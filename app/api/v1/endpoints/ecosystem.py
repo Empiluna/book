@@ -31,10 +31,9 @@ def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dic
                     )
                 )
 
-    allowed_pages = settings.TRIAL_PAGES_LOGIN if user else settings.TRIAL_PAGES_ANONYMOUS
     text = book.trial_text or book.description or "暂无试读内容。"
     chunks = [text[i:i + 560] for i in range(0, len(text), 560)] or ["暂无试读内容。"]
-    preview_chunks = chunks[:allowed_pages]
+    allowed_pages = 99999  # unlimited reading
 
     return {
         "book": book_card(book),
@@ -43,9 +42,9 @@ def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dic
         "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
         "pdf_url": book.ebook_pdf_url,
         "epub_url": book.ebook_epub_url,
-        "reader_url": f"/static/reader.html?book_id={book.id}&record=0",
-        "total_preview_pages": len(preview_chunks),
-        "pages": [{"page": i + 1, "content": c} for i, c in enumerate(preview_chunks)],
+        "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=scroll-reader",
+        "total_preview_pages": len(chunks),
+        "pages": [{"page": i + 1, "content": c} for i, c in enumerate(chunks)],
         "reader_features": [
             "PDF.js预览",
             "EPUB.js预览",

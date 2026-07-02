@@ -449,13 +449,155 @@ async function loadHistory(){
   $('historyList').innerHTML = (data.items||[]).slice(0,12).map(h=>`<div class="mini-item" onclick="openDetail(${h.book.id})"><div><b>${h.book.title}</b><br><span>${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · ${new Date(h.read_at).toLocaleString()}</span></div><button onclick="event.stopPropagation();openReader(${h.book.id})">继续阅读</button></div>`).join('') || '<span class="meta">暂无阅读历史。</span>';
 }
 async function loadProfile(){
-  if(!token){ $('profileStats').innerHTML='请先登录'; $('tagCloud').innerHTML=''; if($('historyList')) $('historyList').innerHTML=''; return; }
+  if(!token){
+    // 未登录状态下，不再显示空白大框，改成引导型占位内容
+    if($('profileStats')){
+      $('profileStats').innerHTML = `
+        <div class="guest-stat-card">
+          <b>登录后生成</b>
+          <span>阅读统计</span>
+          <p>累计阅读、今日阅读、连续阅读天数会在这里展示。</p>
+        </div>
+        <div class="guest-stat-card">
+          <b>30 天</b>
+          <span>阅读趋势</span>
+          <p>系统会根据你的阅读时长生成趋势图。</p>
+        </div>
+        <div class="guest-stat-card">
+          <b>兴趣分析</b>
+          <span>画像建模</span>
+          <p>根据收藏、评分、搜索和阅读行为生成兴趣画像。</p>
+        </div>
+        <div class="guest-stat-card">
+          <b>个性推荐</b>
+          <span>荐书依据</span>
+          <p>用知识图谱解释为什么推荐这些书。</p>
+        </div>
+      `;
+    }
+
+    if($('tagCloud')){
+      $('tagCloud').innerHTML = `
+        <div class="guest-profile-card">
+          <div class="guest-profile-icon">KG</div>
+          <div>
+            <h4>登录后查看你的兴趣画像</h4>
+            <p>系统会从阅读历史、书架、评分、评论和搜索行为中提取偏好标签、偏好作者和偏好领域。</p>
+          </div>
+        </div>
+
+        <div class="guest-chip-wrap">
+          <span class="guest-chip">偏好标签</span>
+          <span class="guest-chip">偏好作者</span>
+          <span class="guest-chip">偏好分类</span>
+          <span class="guest-chip">阅读种子书</span>
+          <span class="guest-chip">知识图谱推荐</span>
+          <span class="guest-chip">阅读趋势</span>
+        </div>
+      `;
+    }
+
+    if($('profileBooks')){
+      $('profileBooks').innerHTML = `
+        <div class="guest-mini-card">
+          <b>推荐种子书</b>
+          <span>登录后会根据你的高分图书、收藏图书和最近阅读生成。</span>
+        </div>
+        <div class="guest-mini-card">
+          <b>兴趣簇</b>
+          <span>例如：人工智能、科幻、文学、历史、心理等。</span>
+        </div>
+      `;
+    }
+
+    if($('historyList')){
+      $('historyList').innerHTML = `
+        <div class="guest-history-card">
+          <div>
+            <b>阅读历史将在登录后显示</b>
+            <span>这里会按图书去重，展示最近阅读、收藏、评分行为。</span>
+          </div>
+          <button onclick="window.location.href='/login?role=user'">去登录</button>
+        </div>
+        <div class="guest-history-timeline">
+          <div><i></i><span>阅读图书</span><em>记录阅读进度</em></div>
+          <div><i></i><span>收藏书籍</span><em>加入想读 / 在读 / 已读</em></div>
+          <div><i></i><span>形成画像</span><em>生成推荐依据</em></div>
+        </div>
+      `;
+    }
+
+    drawGuestTrend();
+    return;
+  }
+
   const [stats, profile]=await Promise.all([api('/user/stats'), api('/user/profile')]);
-  $('profileStats').innerHTML=stat('累计阅读分钟',stats.total_reading_minutes)+stat('已完成图书',stats.completed_books)+stat('在读图书',stats.reading_books)+stat('书架数量',stats.shelf_count);
-  $('tagCloud').innerHTML=(profile.tag_preferences||[]).map(t=>`<span class="cloud" style="font-size:${12+18*t.weight}px">${t.name}</span>`).join('');
-  $('profileBooks').innerHTML=(profile.recent_books||[]).slice(0,5).map(miniItem).join('');
+
+  $('profileStats').innerHTML =
+    stat('累计阅读分钟',stats.total_reading_minutes) +
+    stat('已完成图书',stats.completed_books) +
+    stat('在读图书',stats.reading_books) +
+    stat('书架数量',stats.shelf_count);
+
+  $('tagCloud').innerHTML = (profile.tag_preferences||[])
+    .map(t=>`<span class="cloud" style="font-size:${12+18*t.weight}px">${t.name}</span>`)
+    .join('');
+
+  $('profileBooks').innerHTML = (profile.recent_books||[])
+    .slice(0,5)
+    .map(miniItem)
+    .join('');
+
   drawTrend(stats.trend_30d||[]);
   loadHistory();
+}
+function drawGuestTrend(){
+  const c = $('trendCanvas');
+  if(!c) return;
+
+  const ctx = c.getContext('2d');
+  const W = c.width;
+  const H = c.height;
+  const padL = 42;
+  const padR = 18;
+  const padT = 28;
+  const padB = 42;
+
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.font = '14px Microsoft YaHei, Arial';
+  ctx.fillStyle = 'rgba(15,23,42,.82)';
+  ctx.fillText('登录后生成近30天阅读趋势', padL, 18);
+
+  ctx.strokeStyle = 'rgba(148,163,184,.28)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT);
+  ctx.lineTo(padL, H - padB);
+  ctx.lineTo(W - padR, H - padB);
+  ctx.stroke();
+
+  const mock = [8, 16, 10, 22, 18, 30, 14, 26, 20, 34, 24, 18, 28, 36];
+  const max = 40;
+  const gap = 8;
+  const bw = Math.max(12, (W - padL - padR) / mock.length - gap);
+
+  mock.forEach((v, i) => {
+    const h = (v / max) * (H - padT - padB - 8);
+    const x = padL + i * (bw + gap);
+    const y = H - padB - h;
+
+    const grd = ctx.createLinearGradient(0, y, 0, H - padB);
+    grd.addColorStop(0, 'rgba(124,58,237,.42)');
+    grd.addColorStop(1, 'rgba(14,165,233,.22)');
+
+    ctx.fillStyle = grd;
+    ctx.fillRect(x, y, bw, h);
+  });
+
+  ctx.fillStyle = 'rgba(100,116,139,.82)';
+  ctx.font = '12px Microsoft YaHei, Arial';
+  ctx.fillText('开始阅读、收藏、评分后，这里会显示真实趋势。', padL, H - 12);
 }
 function drawTrend(rows){
   const c=$('trendCanvas'), ctx=c.getContext('2d');

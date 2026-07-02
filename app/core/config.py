@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.1
     LLM_TIMEOUT_SECONDS: int = 15
 
-    TRIAL_PAGES_ANONYMOUS: int = 3
-    TRIAL_PAGES_LOGIN: int = 10
+    TRIAL_PAGES_ANONYMOUS: int = 99999
+    TRIAL_PAGES_LOGIN: int = 99999
     MAX_SHELVES_PER_USER: int = 20
 
     class Config:
