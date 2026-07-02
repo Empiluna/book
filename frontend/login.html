@@ -3,189 +3,159 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>登录 / 注册 - 图书知识图谱</title>
+  <title>用户登录 / 注册 - 图书知识图谱</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       min-height: 100vh;
       background:
-        radial-gradient(circle at 15% 10%, rgba(124,58,237,.12), transparent 28%),
-        radial-gradient(circle at 85% 20%, rgba(14,165,233,.12), transparent 32%),
-        linear-gradient(135deg, #f5f1ea 0%, #eff6ff 55%, #f7f3ff 100%);
-      color: #17202a;
+        radial-gradient(circle at 15% 10%, rgba(124, 58, 237, .12), transparent 28%),
+        radial-gradient(circle at 85% 20%, rgba(14, 165, 233, .12), transparent 32%),
+        linear-gradient(135deg, #f9f1df 0%, #eff6ff 50%, #f7f3ff 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
-      color: #f1f5f9;
+      font-family: "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+      color: #17202a;
       padding: 20px;
     }
     .login-container { width: 100%; max-width: 460px; }
     .login-card {
-      background: rgba(30, 41, 59, 0.82);
+      background: rgba(255, 255, 255, .82);
       backdrop-filter: blur(20px);
-      border: 1px solid rgba(124, 58, 237, 0.22);
+      border: 1px solid rgba(17, 24, 39, .08);
       border-radius: 24px;
       padding: 34px 30px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
+      box-shadow: 0 24px 80px rgba(39, 32, 18, .14);
     }
     .login-header { text-align: center; margin-bottom: 24px; }
     .logo {
-      width: 64px; height: 64px;
+      width: 64px;
+      height: 64px;
       background: linear-gradient(135deg, #7c3aed, #0ea5e9);
-      border-radius: 18px; display: flex; align-items: center; justify-content: center;
-      margin: 0 auto 16px; box-shadow: 0 10px 25px rgba(124, 58, 237, 0.4);
-      font-size: 32px; font-weight: bold; color: white;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      box-shadow: 0 10px 25px rgba(124, 58, 237, .26);
+      font-size: 28px;
+      font-weight: 900;
+      color: white;
     }
-    .login-header h1 { font-size: 1.8rem; font-weight: 800; color: white; margin-bottom: 6px; }
-    .login-header p { color: #94a3b8; font-size: .95rem; line-height: 1.6; }
-    .mode-tabs, .role-tabs {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-      background: rgba(15, 23, 42, .55); border: 1px solid rgba(148,163,184,.14);
-      border-radius: 16px; padding: 6px; margin-bottom: 16px;
+    .login-header h1 { font-size: 1.8rem; font-weight: 800; color: #17202a; margin-bottom: 6px; }
+    .login-header p { color: #667085; font-size: .95rem; line-height: 1.6; }
+    .mode-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: rgba(255, 255, 255, .68);
+      border: 1px solid rgba(17, 24, 39, .08);
+      border-radius: 16px;
+      padding: 6px;
+      margin-bottom: 16px;
     }
-    .tab-btn, .role-btn {
-      border: none; border-radius: 12px; padding: 11px 10px;
-      background: transparent; color: #94a3b8; cursor: pointer;
-      font-weight: 800; transition: .2s;
+    .tab-btn {
+      border: none;
+      border-radius: 12px;
+      padding: 11px 10px;
+      background: transparent;
+      color: #667085;
+      cursor: pointer;
+      font-weight: 800;
+      transition: .2s;
     }
-    .tab-btn.active, .role-btn.active {
-      color: #fff; background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(14,165,233,.9));
-      box-shadow: 0 10px 22px rgba(14,165,233,.18);
+    .tab-btn.active {
+      color: #fff;
+      background: linear-gradient(135deg, #7c3aed, #0ea5e9);
+      box-shadow: 0 10px 22px rgba(14, 165, 233, .18);
     }
     .role-note {
-      margin: -4px 0 16px; color: #cbd5e1; background: rgba(124,58,237,.12);
-      border: 1px solid rgba(124,58,237,.22); border-radius: 12px;
-      padding: 10px 12px; font-size: .86rem; line-height: 1.6;
+      margin: -4px 0 16px;
+      color: #475467;
+      background: rgba(124, 58, 237, .08);
+      border: 1px solid rgba(124, 58, 237, .12);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: .86rem;
+      line-height: 1.6;
     }
     .form-group { margin-bottom: 15px; }
-    .form-group label { display: block; font-size: .9rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px; }
+    .form-group label { display: block; font-size: .9rem; font-weight: 700; color: #344054; margin-bottom: 8px; }
     .input-wrapper { position: relative; }
     .input-wrapper input {
-      width: 100%; padding: 14px 46px 14px 16px;
-      background: rgba(15, 23, 42, 0.62);
-      border: 1px solid rgba(124, 58, 237, 0.30);
-      border-radius: 12px; color: white; font-size: 1rem;
-      outline: none; transition: border .2s, box-shadow .2s;
+      width: 100%;
+      padding: 14px 46px 14px 16px;
+      background: rgba(255, 255, 255, .88);
+      border: 1px solid rgba(17, 24, 39, .10);
+      border-radius: 12px;
+      color: #17202a;
+      font-size: 1rem;
+      outline: none;
+      transition: border .2s, box-shadow .2s;
     }
-    .input-wrapper input:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2); }
+    .input-wrapper input:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, .16); }
+    .input-wrapper input::placeholder { color: #98a2b3; }
     .toggle-password {
-      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-      background: none; border: none; color: #94a3b8; font-size: 1.05rem; cursor: pointer; padding: 4px;
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #667085;
+      font-size: .9rem;
+      cursor: pointer;
+      padding: 4px;
     }
     .submit-btn {
-      width: 100%; padding: 14px; background: linear-gradient(135deg, #7c3aed, #0ea5e9);
-      border: none; border-radius: 12px; color: white; font-size: 1rem; font-weight: 800;
-      cursor: pointer; transition: transform .1s, box-shadow .2s; margin-top: 10px; letter-spacing: .5px;
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #7c3aed, #0ea5e9);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .1s, box-shadow .2s;
+      margin-top: 10px;
     }
-    .submit-btn:hover { box-shadow: 0 10px 20px rgba(124, 58, 237, 0.45); transform: translateY(-1px); }
+    .submit-btn:hover { box-shadow: 0 10px 20px rgba(124, 58, 237, .28); transform: translateY(-1px); }
     .submit-btn:disabled { opacity: .62; cursor: not-allowed; transform: none; }
     .demo-hint {
-      margin-top: 22px; text-align: center; font-size: .85rem; color: #94a3b8;
-      border-top: 1px solid rgba(148, 163, 184, 0.15); padding-top: 18px; line-height: 1.8;
+      margin-top: 22px;
+      text-align: center;
+      font-size: .85rem;
+      color: #667085;
+      border-top: 1px solid rgba(17, 24, 39, .10);
+      padding-top: 18px;
+      line-height: 1.8;
     }
-    .demo-hint code { background: rgba(124, 58, 237, 0.15); padding: 2px 8px; border-radius: 20px; color: #c4b5fd; }
+    .demo-hint code { background: rgba(124, 58, 237, .10); padding: 2px 8px; border-radius: 20px; color: #5b21b6; }
     .message {
-      border-radius: 10px; padding: 12px; font-size: .9rem; margin-bottom: 16px;
-      display: none; animation: fadeIn .2s; line-height: 1.6;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: .9rem;
+      margin-bottom: 16px;
+      display: none;
+      line-height: 1.6;
     }
     .message.visible { display: block; }
-    .message.error { background: rgba(239, 68, 68, .15); border: 1px solid rgba(239, 68, 68, .38); color: #fca5a5; }
-    .message.success { background: rgba(34, 197, 94, .13); border: 1px solid rgba(34, 197, 94, .35); color: #86efac; }
+    .message.error { background: rgba(239, 68, 68, .12); border: 1px solid rgba(239, 68, 68, .28); color: #b42318; }
+    .message.success { background: rgba(34, 197, 94, .12); border: 1px solid rgba(34, 197, 94, .28); color: #027a48; }
     .hidden { display: none !important; }
-    .back-link { display: block; text-align: center; margin-top: 20px; color: #a78bfa; text-decoration: none; font-size: .9rem; }
-    .back-link:hover { color: white; text-decoration: underline; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-    /* 登录页浅色主题覆盖：贴近主页面风格 */
-body {
-  background:
-    radial-gradient(circle at 15% 10%, rgba(124, 58, 237, .12), transparent 28%),
-    radial-gradient(circle at 85% 20%, rgba(14, 165, 233, .12), transparent 32%),
-    linear-gradient(135deg, #f9f1df 0%, #eff6ff 50%, #f7f3ff 100%) !important;
-  color: #17202a !important;
-}
-
-.login-card {
-  background: rgba(255, 255, 255, .78) !important;
-  border: 1px solid rgba(17, 24, 39, .08) !important;
-  box-shadow: 0 24px 80px rgba(39, 32, 18, .14) !important;
-}
-
-.login-header h1 {
-  color: #17202a !important;
-}
-
-.login-header p {
-  color: #667085 !important;
-}
-
-.mode-tabs,
-.role-tabs {
-  background: rgba(255, 255, 255, .68) !important;
-  border: 1px solid rgba(17, 24, 39, .08) !important;
-}
-
-.tab-btn,
-.role-btn {
-  color: #667085 !important;
-}
-
-.tab-btn.active,
-.role-btn.active {
-  color: #fff !important;
-  background: linear-gradient(135deg, #7c3aed, #0ea5e9) !important;
-}
-
-.role-note {
-  color: #475467 !important;
-  background: rgba(124, 58, 237, .08) !important;
-  border: 1px solid rgba(124, 58, 237, .12) !important;
-}
-
-.form-group label {
-  color: #344054 !important;
-}
-
-.input-wrapper input {
-  background: rgba(255, 255, 255, .86) !important;
-  color: #17202a !important;
-  border: 1px solid rgba(17, 24, 39, .10) !important;
-}
-
-.input-wrapper input::placeholder {
-  color: #98a2b3 !important;
-}
-
-.toggle-password {
-  color: #667085 !important;
-}
-
-.demo-hint {
-  color: #667085 !important;
-  border-top: 1px solid rgba(17, 24, 39, .10) !important;
-}
-
-.demo-hint code {
-  background: rgba(124, 58, 237, .10) !important;
-  color: #5b21b6 !important;
-}
-
-.back-link {
-  color: #5b21b6 !important;
-}
-
-.back-link:hover {
-  color: #7c3aed !important;
-}
+    .back-link { display: block; text-align: center; margin-top: 20px; color: #5b21b6; text-decoration: none; font-size: .9rem; }
+    .back-link:hover { color: #7c3aed; text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <div class="logo">📚</div>
-        <h1 id="pageTitle">图书知识图谱</h1>
-        <p id="pageSubtitle">请选择用户身份后登录或注册</p>
+        <div class="logo">KG</div>
+        <h1>用户入口</h1>
+        <p id="pageSubtitle">登录后进入荐书系统；新用户可直接注册普通账号。</p>
       </div>
 
       <div class="mode-tabs">
@@ -193,12 +163,7 @@ body {
         <button type="button" class="tab-btn" data-mode="register">注册</button>
       </div>
 
-      <div class="role-tabs">
-        <button type="button" class="role-btn active" data-role="user">普通用户</button>
-        <button type="button" class="role-btn" data-role="admin">管理员</button>
-      </div>
-
-      <div id="roleNote" class="role-note"></div>
+      <div id="roleNote" class="role-note">管理员账号请从独立后台入口登录，普通前端不提供管理员注册。</div>
       <div id="msgBox" class="message"></div>
 
       <form id="loginForm" autocomplete="on">
@@ -212,10 +177,10 @@ body {
           <label for="loginPassword">密码</label>
           <div class="input-wrapper">
             <input type="password" id="loginPassword" placeholder="输入密码" required autocomplete="current-password">
-            <button type="button" class="toggle-password" data-target="loginPassword" title="显示密码">👁️</button>
+            <button type="button" class="toggle-password" data-target="loginPassword">显示</button>
           </div>
         </div>
-        <button type="submit" class="submit-btn" id="loginBtn">登录</button>
+        <button type="submit" class="submit-btn" id="loginBtn">登录用户端</button>
       </form>
 
       <form id="registerForm" class="hidden" autocomplete="on">
@@ -235,31 +200,23 @@ body {
           <label for="regPassword">密码</label>
           <div class="input-wrapper">
             <input type="password" id="regPassword" placeholder="至少 6 位" required autocomplete="new-password">
-            <button type="button" class="toggle-password" data-target="regPassword" title="显示密码">👁️</button>
+            <button type="button" class="toggle-password" data-target="regPassword">显示</button>
           </div>
         </div>
-        <div class="form-group hidden" id="adminCodeGroup">
-          <label for="adminCode">管理员注册码</label>
-          <div class="input-wrapper"><input type="password" id="adminCode" placeholder="默认演示码：admin2026"></div>
-        </div>
-        <button type="submit" class="submit-btn" id="registerBtn">注册</button>
+        <button type="submit" class="submit-btn" id="registerBtn">注册用户账号</button>
       </form>
 
       <div class="demo-hint">
-        用户演示账号：<code>demo</code> / <code>demo123</code><br>
-        管理员演示账号：<code>admin</code> / <code>admin123</code><br>
-        管理员注册演示码：<code>admin2026</code>
+        用户演示账号：<code>demo</code> / <code>demo123</code>
       </div>
     </div>
-    <a href="/" class="back-link">← 返回首页</a>
+    <a href="/" class="back-link">返回首页</a>
   </div>
 
   <script>
     const API_BASE = '/api/v1';
     let mode = new URLSearchParams(location.search).get('mode') || 'login';
-    let role = new URLSearchParams(location.search).get('role') || 'user';
     if (!['login', 'register'].includes(mode)) mode = 'login';
-    if (!['user', 'admin'].includes(role)) role = 'user';
 
     const $ = (id) => document.getElementById(id);
     const msgBox = $('msgBox');
@@ -278,28 +235,9 @@ body {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
       loginForm.classList.toggle('hidden', mode !== 'login');
       registerForm.classList.toggle('hidden', mode !== 'register');
-      renderText();
-    }
-
-    function setRole(nextRole) {
-      role = nextRole;
-      document.querySelectorAll('.role-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.role === role));
-      $('adminCodeGroup').classList.toggle('hidden', !(mode === 'register' && role === 'admin'));
-      renderText();
-    }
-
-    function renderText() {
-      const isAdmin = role === 'admin';
-      $('pageTitle').textContent = isAdmin ? '管理员入口' : '用户入口';
       $('pageSubtitle').textContent = mode === 'login'
-        ? (isAdmin ? '管理员登录后进入后台管理系统' : '普通用户登录后进入荐书系统')
-        : (isAdmin ? '注册管理员账号需要填写管理员注册码' : '注册普通用户账号，使用书架、画像和推荐功能');
-      $('roleNote').textContent = mode === 'login'
-        ? (isAdmin ? '当前选择：管理员登录。普通用户账号不能从此入口登录。' : '当前选择：普通用户登录。管理员账号请切换到管理员入口。')
-        : (isAdmin ? '当前选择：注册管理员。请填写管理员注册码，注册成功后自动进入后台。' : '当前选择：注册普通用户。注册成功后自动进入用户端首页。');
-      $('loginBtn').textContent = isAdmin ? '登录管理员后台' : '登录用户端';
-      $('registerBtn').textContent = isAdmin ? '注册管理员账号' : '注册用户账号';
-      $('adminCodeGroup').classList.toggle('hidden', !(mode === 'register' && role === 'admin'));
+        ? '登录后进入荐书系统；管理员请从独立后台入口登录。'
+        : '注册普通用户账号，使用书架、画像、推荐和书评功能。';
     }
 
     async function request(path, payload) {
@@ -316,21 +254,20 @@ body {
     function saveLogin(data) {
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      location.href = data.user && data.user.is_admin ? '/admin' : '/';
+      location.href = '/';
     }
 
     async function doLogin(account, password) {
-      return request('/user/login', { account, username_or_email: account, password, role });
+      return request('/user/login', { account, username_or_email: account, password, role: 'user' });
     }
 
     document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
-    document.querySelectorAll('.role-btn').forEach(btn => btn.addEventListener('click', () => setRole(btn.dataset.role)));
     document.querySelectorAll('.toggle-password').forEach(btn => {
       btn.addEventListener('click', () => {
         const input = $(btn.dataset.target);
-        const nextType = input.type === 'password' ? 'text' : 'password';
-        input.type = nextType;
-        btn.textContent = nextType === 'password' ? '👁️' : '🙈';
+        const visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        btn.textContent = visible ? '显示' : '隐藏';
       });
     });
 
@@ -348,7 +285,7 @@ body {
         showMessage(err.message || '登录失败');
       } finally {
         $('loginBtn').disabled = false;
-        renderText();
+        $('loginBtn').textContent = '登录用户端';
       }
     });
 
@@ -358,27 +295,24 @@ body {
       const email = $('regEmail').value.trim();
       const nickname = $('regNickname').value.trim();
       const password = $('regPassword').value;
-      const adminCode = $('adminCode').value.trim();
       if (!username || username.length < 2) return showMessage('用户名至少 2 个字符');
       if (!email) return showMessage('请填写邮箱');
       if (!password || password.length < 6) return showMessage('密码至少 6 位');
-      if (role === 'admin' && !adminCode) return showMessage('注册管理员需要填写管理员注册码');
       $('registerBtn').disabled = true;
       $('registerBtn').textContent = '注册中...';
       try {
-        await request('/user/register', { username, email, nickname, password, role, admin_code: adminCode });
+        await request('/user/register', { username, email, nickname, password });
         showMessage('注册成功，正在自动登录...', 'success');
         saveLogin(await doLogin(username, password));
       } catch (err) {
         showMessage(err.message || '注册失败');
       } finally {
         $('registerBtn').disabled = false;
-        renderText();
+        $('registerBtn').textContent = '注册用户账号';
       }
     });
 
     setMode(mode);
-    setRole(role);
   </script>
 </body>
 </html>

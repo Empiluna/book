@@ -8,7 +8,6 @@ from fastapi import HTTPException
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password, is_email, validate_password_strength, verify_password
 from app.models import (
     Book,
@@ -26,7 +25,6 @@ from app.models import (
 from app.services.serializers import book_card, user_card
 
 DEFAULT_SHELVES = [("想读", "want_to_read"), ("在读", "reading"), ("已读", "read")]
-settings = get_settings()
 
 
 def normalize_role(role: str | None) -> str:
@@ -50,21 +48,8 @@ def register_user(
     email: str,
     password: str,
     nickname: str | None = None,
-    role: str = "user",
-    admin_code: str | None = None,
 ) -> dict:
-    """注册账号。
-
-    普通用户直接注册；管理员注册需要填写管理员注册码，避免所有人都能创建后台账号。
-    默认管理员注册码可在 .env 中通过 ADMIN_REGISTER_CODE 修改。
-    """
     validate_password_strength(password)
-    role = normalize_role(role)
-    is_admin = role == "admin"
-
-    if is_admin and (admin_code or "").strip() != settings.ADMIN_REGISTER_CODE:
-        raise HTTPException(403, "管理员注册码错误，不能注册管理员账号")
-
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(400, "该用户名已被注册，请更换")
     if db.query(User).filter(User.email == email).first():
@@ -75,7 +60,7 @@ def register_user(
         email=email,
         nickname=nickname or username,
         hashed_password=hash_password(password),
-        is_admin=is_admin,
+        is_admin=False,
     )
     db.add(user)
     db.commit()

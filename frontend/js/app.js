@@ -556,9 +556,10 @@ async function adminLoadUsers(){
   const q = $('adminUserSearch')?.value?.trim();
   const data = await api('/admin/users' + (q ? `?q=${encodeURIComponent(q)}` : '')).catch(e=>({items:[], error:e.message}));
   if(data.error){ $('adminUserList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
-  $('adminUserList').innerHTML = `<table><thead><tr><th>ID</th><th>用户</th><th>邮箱</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(u=>`<tr><td>${u.id}</td><td><b>${u.nickname||u.username}</b><br><span>${u.username}</span></td><td>${u.email}</td><td>${u.is_admin?'管理员':'用户'}</td><td><span class="${u.is_active?'status-ok':'status-bad'}">${u.is_active?'启用':'禁用'}</span></td><td><button onclick="adminToggleUser(${u.id}, ${u.is_active})">${u.is_active?'禁用':'启用'}</button></td></tr>`).join('') || '<tr><td colspan="6">暂无用户</td></tr>'}</tbody></table>`;
+  $('adminUserList').innerHTML = `<table><thead><tr><th>ID</th><th>用户</th><th>邮箱</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(u=>`<tr><td>${u.id}</td><td><b>${u.nickname||u.username}</b><br><span>${u.username}</span></td><td>${u.email}</td><td>${u.is_admin?'管理员':'用户'}</td><td><span class="${u.is_active?'status-ok':'status-bad'}">${u.is_active?'启用':'禁用'}</span></td><td><button onclick="adminToggleUser(${u.id}, ${u.is_active})">${u.is_active?'禁用':'启用'}</button><button onclick="adminToggleRole(${u.id}, ${u.is_admin})">${u.is_admin?'取消管理员':'设为管理员'}</button></td></tr>`).join('') || '<tr><td colspan="6">暂无用户</td></tr>'}</tbody></table>`;
 }
 async function adminToggleUser(id, active){ await api(`/admin/users/${id}/status`, {method:'PUT', body:JSON.stringify({is_active:!active})}); toast('用户状态已更新'); adminLoadUsers(); }
+async function adminToggleRole(id, isAdmin){ await api(`/admin/users/${id}/role`, {method:'PUT', body:JSON.stringify({is_admin:!isAdmin})}); toast('用户角色已更新'); await Promise.allSettled([adminLoadUsers(), loadAdmin()]); }
 async function adminExportUsers(){ const r=await api('/admin/users/export-csv'); await navigator.clipboard?.writeText(r.content).catch(()=>{}); toast('CSV已复制到剪贴板'); }
 async function adminLoadComments(){
   if(!$('adminCommentList') || !token) return;
@@ -633,7 +634,7 @@ document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click
 }));
 $('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('loginBtn').onclick=()=>{ window.location.href = '/login?mode=login&role=user'; };
-$('adminBtn').onclick=()=>{ window.location.href = '/login?mode=login&role=admin'; };
+$('adminBtn').onclick=()=>{ window.location.href = '/admin'; };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 updateUserBadge(); updateSearchbarForView('home'); loadAll();

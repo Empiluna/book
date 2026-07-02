@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
 from app.core.cache import cache
 from app.core.database import get_db
 from app.models import Book, BookComment, Bookmark, ChatHistory, PurchaseClick, ReadingHistory, SearchLog, SystemConfig, User, UserRating
-from app.schemas import AdminUserStatusRequest, SystemConfigUpdate
+from app.schemas import AdminUserRoleRequest, AdminUserStatusRequest, SystemConfigUpdate
 from app.services.serializers import book_card, user_card
 
 router = APIRouter(prefix="/admin", tags=["管理员后台"])
@@ -105,6 +105,18 @@ def user_status(user_id: int, data: AdminUserStatusRequest, admin: User = Depend
     user.is_active = data.is_active
     db.commit()
     return {"message": "用户状态已更新", "user": user_card(user)}
+
+
+@router.put("/users/{user_id}/role")
+def user_role(user_id: int, data: AdminUserRoleRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "用户不存在")
+    if user.id == admin.id and not data.is_admin:
+        raise HTTPException(400, "不能取消自己的管理员身份")
+    user.is_admin = data.is_admin
+    db.commit()
+    return {"message": "用户角色已更新", "user": user_card(user)}
 
 
 @router.get("/users/export-csv")

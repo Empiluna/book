@@ -40,7 +40,6 @@ class Settings(BaseSettings):
     TRIAL_PAGES_ANONYMOUS: int = 3
     TRIAL_PAGES_LOGIN: int = 10
     MAX_SHELVES_PER_USER: int = 20
-    ADMIN_REGISTER_CODE: str = "admin2026"
 
     class Config:
         env_file = ".env"

@@ -7,7 +7,7 @@ class LoginRequest(BaseModel):
     account: str | None = None
     username_or_email: str | None = None
     password: str
-    # user = 普通用户登录；admin = 管理员登录。为空时兼容旧接口，不校验角色。
+    # user = 普通用户登录；admin = 独立后台管理员登录。
     role: str | None = None
 
     @field_validator("username_or_email", mode="before")
@@ -21,9 +21,6 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=64)
     nickname: str | None = None
-    # user = 注册普通用户；admin = 注册管理员。管理员注册需要 admin_code。
-    role: str = "user"
-    admin_code: str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -184,6 +181,10 @@ class ChatRequest(BaseModel):
 
 class AdminUserStatusRequest(BaseModel):
     is_active: bool
+
+
+class AdminUserRoleRequest(BaseModel):
+    is_admin: bool
 
 
 class SystemConfigUpdate(BaseModel):
