@@ -131,10 +131,13 @@ async function login(user='demo', pass='demo123', openAdmin=false){
 }
 async function loadMetrics(){
   const dash = token ? await api('/admin/dashboard').catch(()=>null) : null;
-  const gs = await api('/graph/stats');
-  $('mBooks').textContent = dash?.cards?.books ?? gs.books ?? '--';
-  $('mComments').textContent = dash?.cards?.comments ?? '--';
-  $('mGraph').textContent = (gs.books||0)+(gs.authors||0)+(gs.tags||0)+(gs.publishers||0)+(gs.series||0)+(gs.semantic_nodes||0);
+  const gs = await api('/graph/stats').catch(()=>({}));
+  if($('mBooks')){
+    $('mBooks').textContent = dash?.cards?.books ?? gs.books ?? '--';
+  }
+  if($('mComments')){
+    $('mComments').textContent = dash?.cards?.comments ?? '--';
+  }
 }
 async function loadRecommendations(){ await loadShelfState(); const data = await api('/recommend/home?limit=16'); currentBooks = data.items; $('recommendGrid').innerHTML = data.items.map(bookCard).join(''); recordExposure(data.items, 'home'); populateGraphBookSelect(); }
 async function loadHot(){ const data = await api('/recommend/hot?limit=8'); $('hotList').innerHTML = data.items.map(miniItem).join(''); }
@@ -1084,7 +1087,9 @@ function activateView(view){
   if(view==='admin') loadAdmin();
 }
 
-document.querySelectorAll('.nav').forEach(btn=>btn.addEventListener('click',()=>activateView(btn.dataset.view)));
+document.querySelectorAll('.nav[data-view]').forEach(btn=>{
+  btn.addEventListener('click', () => activateView(btn.dataset.view));
+});
 document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click',()=>{
   adminSwitchTab(btn.dataset.adminTab);
 }));

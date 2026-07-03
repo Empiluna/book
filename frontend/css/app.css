@@ -1069,3 +1069,72 @@
     height: 300px;
   }
 }
+
+/* 首页布局调整：去掉模块标签和部分统计卡片后重新平衡视觉 */
+.hero{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) 260px;
+  align-items:center;
+  gap:34px;
+  padding:36px 36px;
+}
+
+.hero h2{
+  margin-top:0;
+  max-width:820px;
+}
+
+.hero p{
+  max-width:860px;
+  line-height:1.8;
+}
+
+.hero-actions{
+  margin-top:24px;
+}
+
+.hero .metric-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+  justify-self:end;
+  width:100%;
+  max-width:240px;
+}
+
+.hero .metric{
+  min-height:98px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+
+.assistant-entry{
+  margin-top:10px;
+  border:0;
+  background:linear-gradient(135deg,#7c3aed,#0ea5e9);
+  color:#fff;
+  box-shadow:0 14px 34px rgba(124,58,237,.22);
+}
+
+.assistant-entry:hover{
+  transform:translateY(-1px);
+  filter:brightness(1.04);
+}
+
+.assistant-entry.active{
+  background:linear-gradient(135deg,#7c3aed,#0ea5e9);
+  color:#fff;
+}
+
+@media(max-width:1100px){
+  .hero{
+    grid-template-columns:1fr;
+  }
+
+  .hero .metric-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    max-width:none;
+    justify-self:stretch;
+  }
+}

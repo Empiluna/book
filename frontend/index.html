@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>知人知书 · 个性化荐书系统</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=ai-search-merge-1" />
+  <link rel="stylesheet" href="/static/css/app.css?v=home-layout-1" />
 </head>
 <body>
   <div class="bg-orb orb-a"></div><div class="bg-orb orb-b"></div><div class="bg-orb orb-c"></div>
@@ -16,6 +16,7 @@
       <button class="nav" data-view="graph">知识图谱</button>
       <button class="nav" data-view="shelf">我的书架</button>
       <button class="nav" data-view="profile">个人画像</button>
+      <button class="nav assistant-entry" type="button" onclick="openAssistant()">智能助手</button>
     </nav>
     <div class="login-card">
       <div id="userBadge">未登录</div>
@@ -40,16 +41,13 @@
     <section id="home" class="view active">
       <div class="hero glass">
         <div>
-          <span class="pill">四大模块整合增强版</span>
           <h2>用用户画像理解你，用知识图谱解释推荐。</h2>
           <p>系统融合高级知识图谱语义推理、ItemCF、热门推荐和新书推荐，提供可解释的个性化荐书、试读、书评、购书和书架管理闭环。</p>
-          <div class="hero-actions"><button class="primary" onclick="loadRecommendations()">刷新推荐</button><button class="ghost" onclick="openAssistant()">问智能助手</button></div>
+          <div class="hero-actions"><button class="primary" onclick="loadRecommendations()">刷新推荐</button></div>
         </div>
         <div class="metric-grid">
           <div class="metric"><b id="mBooks">--</b><span>图书</span></div>
           <div class="metric"><b id="mComments">--</b><span>评论</span></div>
-          <div class="metric"><b id="mGraph">--</b><span>图谱节点</span></div>
-          <div class="metric"><b>4</b><span>核心模块</span></div>
         </div>
       </div>
       <div class="section-title"><h3>为你推荐</h3><span>Hybrid: KG 40% + CF 40% + Hot 10% + New 10%</span></div>
@@ -137,6 +135,6 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js?v=guest-profile"></script>
+  <script src="/static/js/app.js?v=home-layout-1"></script>
 </body>
 </html>
