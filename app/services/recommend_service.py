@@ -106,7 +106,8 @@ class RecommendService:
         ids |= {
             h.book_id
             for h in self.db.query(ReadingHistory)
-            .filter_by(user_id=user.id, status="read")
+            .filter(ReadingHistory.user_id == user.id)
+            .filter(ReadingHistory.status.in_(["want_to_read", "reading", "read"]))
             .all()
         }
 

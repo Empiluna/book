@@ -46,6 +46,46 @@ def ensure_default_shelves(db: Session, user_id: int) -> None:
     db.commit()
 
 
+def sync_bookshelf_by_reading_status(
+    db: Session,
+    user: User,
+    book_id: int,
+    status: str,
+) -> None:
+    """Keep default shelves aligned with real reading behavior."""
+    if status not in {"reading", "read"}:
+        return
+
+    ensure_default_shelves(db, user.id)
+
+    existing_read = db.query(Bookmark).filter_by(
+        user_id=user.id,
+        book_id=book_id,
+        shelf_name="已读",
+    ).first()
+
+    if existing_read and status == "reading":
+        return
+
+    target_shelf = "已读" if status == "read" else "在读"
+    target_status = "read" if status == "read" else "reading"
+
+    db.query(Bookmark).filter(
+        Bookmark.user_id == user.id,
+        Bookmark.book_id == book_id,
+        Bookmark.shelf_name.in_(["想读", "在读", "已读"]),
+    ).delete(synchronize_session=False)
+
+    db.add(
+        Bookmark(
+            user_id=user.id,
+            book_id=book_id,
+            shelf_name=target_shelf,
+            reading_status=target_status,
+        )
+    )
+
+
 def register_user(
     db: Session,
     username: str,
@@ -129,6 +169,8 @@ def record_reading_history(db: Session, user: User, book_id: int, status: str = 
     book = db.get(Book, book_id)
     if not book or book.is_deleted:
         raise HTTPException(404, "图书不存在")
+    if status in {"reading", "read"}:
+        sync_bookshelf_by_reading_status(db, user, book_id, status)
     row = ReadingHistory(user_id=user.id, book_id=book_id, status=status, source=source)
     db.add(row)
     db.commit()
@@ -160,12 +202,14 @@ def update_reading_progress(db: Session, user: User, book_id: int, current_page:
         ))
         row.reading_minutes = (row.reading_minutes or 0) + session_minutes
 
-    if row.progress_percent >= 95:
+    if row.progress_percent >= 100:
         status = "read"
     elif row.progress_percent > 0:
         status = "reading"
     else:
         status = "want_to_read"
+    if status in {"reading", "read"}:
+        sync_bookshelf_by_reading_status(db, user, book_id, status)
     db.add(ReadingHistory(user_id=user.id, book_id=book_id, status=status, source="progress"))
     db.commit()
     return {"book": book_card(book), "current_page": row.current_page, "progress_percent": row.progress_percent, "reading_minutes": row.reading_minutes, "status": status, "session_minutes": session_minutes}
@@ -180,7 +224,6 @@ def rate_book(db: Session, user: User, book_id: int, rating: float) -> dict:
         row.rating = rating
     else:
         db.add(UserRating(user_id=user.id, book_id=book_id, rating=rating))
-    db.add(ReadingHistory(user_id=user.id, book_id=book_id, status="read", source="rating"))
     db.add(RecommendationFeedback(user_id=user.id, book_id=book_id, event_type="rating", source="user_rating"))
     book.hot_score += 0.25
     db.commit()
@@ -201,6 +244,9 @@ def update_book_rating(db: Session, book_id: int) -> None:
 
 
 def add_bookmark(db: Session, user: User, book_id: int, shelf_name: str = "想读", reading_status: str = "want_to_read") -> dict:
+    if shelf_name == "在读" or reading_status == "reading":
+        raise HTTPException(400, "在读状态由阅读行为自动生成，请点击在线试读或保存阅读进度")
+
     ensure_default_shelves(db, user.id)
     if db.query(Bookshelf).filter_by(user_id=user.id).count() >= 20 and not db.query(Bookshelf).filter_by(user_id=user.id, name=shelf_name).first():
         raise HTTPException(400, "书架数量已达上限")
@@ -317,11 +363,29 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
     for r in ratings:
         mark(r.book, max(float(r.rating or 0), 0.5))
     for b in bookmarks:
-        mark(b.book, 2.0)
+        if b.reading_status == "read" or b.shelf_name == "已读":
+            mark(b.book, 3.0)
+        elif b.reading_status == "reading" or b.shelf_name == "在读":
+            mark(b.book, 2.6)
+        elif b.reading_status == "want_to_read" or b.shelf_name == "想读":
+            mark(b.book, 1.2)
+        else:
+            mark(b.book, 0.8)
     for p in progresses:
-        mark(p.book, 1.0 + float(p.progress_percent or 0) / 100)
+        progress = float(p.progress_percent or 0)
+        if progress >= 100:
+            mark(p.book, 3.2)
+        elif progress > 0:
+            mark(p.book, 1.8 + progress / 100)
+        else:
+            mark(p.book, 0.5)
     for h in histories:
-        mark(h.book, 1.0)
+        if h.status == "read":
+            mark(h.book, 3.0)
+        elif h.status == "reading":
+            mark(h.book, 2.2)
+        elif h.status == "want_to_read":
+            mark(h.book, 1.0)
 
     tag_counter: Counter[str] = Counter()
     author_counter: Counter[str] = Counter()
@@ -405,9 +469,13 @@ def reading_stats(db: Session, user: User) -> dict[str, Any]:
     sessions = db.query(ReadingSession).filter_by(user_id=user.id).all()
     comments_count = db.query(BookComment).filter_by(user_id=user.id, is_deleted=False).count()
     ratings_count = db.query(UserRating).filter_by(user_id=user.id).count()
-    completed_set = {p.book_id for p in progresses if p.progress_percent >= 95} | {h.book_id for h in histories if h.status == "read"}
+    completed_set = {p.book_id for p in progresses if p.progress_percent >= 100} | {h.book_id for h in histories if h.status == "read"}
     completed = len(completed_set)
-    reading = len({p.book_id for p in progresses if 0 < p.progress_percent < 95} | {b.book_id for b in bookmarks if b.reading_status == "reading"})
+    reading_set = (
+        {p.book_id for p in progresses if 0 < p.progress_percent < 100}
+        | {b.book_id for b in bookmarks if b.reading_status == "reading"}
+    )
+    reading = len(reading_set - completed_set)
     want_to_read = len({b.book_id for b in bookmarks if b.shelf_name == "想读" or b.reading_status == "want_to_read"})
 
     # 新版本以 reading_sessions 作为阅读时长口径，避免每次保存进度把整本书累计分钟重复计入当天。

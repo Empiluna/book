@@ -74,7 +74,7 @@ async function loadShelfState(){
 function bookCard(b){
   const id = b.id || b.book_id;
   const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${b.cover_url||''}" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}${shelfButton(id,'在读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${b.cover_url||''}" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
 }
 async function recordFeedback(bookId, eventType, source='frontend'){
   if(!bookId) return;
@@ -213,12 +213,11 @@ function reviewsHtml(bookId, comments){
 async function openDetail(id){
   const b = await api(`/books/${id}`); activeBook=b;
   await loadShelfState();
-  recordReadingAction(id, 'reading', 'detail');
   recordFeedback(id, 'click', 'detail');
   const sim = await api(`/recommend/similar/${id}?limit=6`).catch(()=>({items:[]}));
   const comments = await api(`/ecosystem/comments/${id}`).catch(()=>({items:[]}));
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
-  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}${shelfButton(b.id,'在读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
+  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
   $('detailModal').classList.remove('hidden');
 }
 function closeDetail(){ $('detailModal').classList.add('hidden'); }
