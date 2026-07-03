@@ -2,8 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>在线阅读器</title>
+  <title>在线阅读器 v2</title>
   <style>
     :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;color:#17202a;background:#f6f7fb}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f6f7fb;color:#17202a;overflow:hidden}
@@ -12,7 +15,7 @@
     .title{min-width:0}.title h1{margin:0 0 5px;font-size:18px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{display:flex;align-items:center;gap:10px;color:#64748b;font-size:12px}.progress{width:180px;height:7px;overflow:hidden;border-radius:999px;background:#e2e8f0}.progress div{height:100%;width:0;background:linear-gradient(90deg,#4f46e5,#06b6d4)}
     .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
     button{border:0;border-radius:12px;padding:9px 12px;background:#312e81;color:#fff;font-weight:800;cursor:pointer;line-height:1}button:hover{filter:brightness(1.06)}button:disabled{opacity:.45;cursor:not-allowed}.ghost{background:#e2e8f0;color:#334155}.pagebox{display:flex;align-items:center;gap:6px;color:#475569;font-size:13px}.pagebox input{width:56px;height:34px;border:1px solid #cbd5e1;border-radius:10px;text-align:center;font-weight:800;background:white;color:#17202a}.zoom{min-width:54px;text-align:center;color:#475569;font-size:13px;font-weight:800}
-    .stage{min-height:0;overflow:auto;padding:24px;background:radial-gradient(circle at 15% 5%,#dbeafe,transparent 34%),radial-gradient(circle at 86% 12%,#ede9fe,transparent 30%),#f8fafc}
+    .stage{min-height:0;overflow:auto;padding:24px;background:radial-gradient(circle at 15% 5%,#dbeafe,transparent 34%),radial-gradient(circle at 86% 12%,#ede9fe,transparent 30%),#f8fafc}.stage:focus{outline:none}
     .pdf-pages{display:grid;gap:18px;justify-items:center}.pdf-page{max-width:100%;background:white;box-shadow:0 18px 46px rgba(15,23,42,.16);scroll-margin-top:24px}canvas{display:block;max-width:100%;height:auto;background:white}.pdf-placeholder{min-height:300px;display:grid;place-items:center;color:#94a3b8;font-size:14px;background:white;border-radius:4px}
     .epubbox{width:min(980px,100%);margin:0 auto;border:1px solid #e5e7eb;border-radius:18px;background:white;overflow:auto;box-shadow:0 18px 46px rgba(15,23,42,.14)}
     .text-pages{max-width:860px;margin:0 auto;display:grid;gap:16px;padding-bottom:60px}.text-page{padding:34px 42px;border-radius:18px;background:#fffaf0;border:1px solid rgba(120,113,108,.16);font-size:18px;line-height:1.9;box-shadow:0 16px 38px rgba(15,23,42,.08);scroll-margin-top:24px}.text-page b{display:block;margin-bottom:12px}.hint{max-width:760px;margin:60px auto;padding:22px;border-radius:18px;background:white;color:#64748b;line-height:1.7;box-shadow:0 16px 38px rgba(15,23,42,.08)}
@@ -39,7 +42,7 @@
         <button class="ghost" onclick="saveProgress()">保存进度</button>
       </div>
     </header>
-    <main id="stage" class="stage"><div class="hint">加载阅读器中...</div></main>
+    <main id="stage" class="stage" tabindex="-1"><div class="hint">加载阅读器中...</div></main>
   </div>
 
   <script src="/static/vendor/jszip.min.js?v=3.10.1"></script>
@@ -54,7 +57,7 @@
     let trial = null, mode = 'text', page = 1, pageTotal = 1;
     let pdfDoc = null, pdfUrl = null, scale = 3, fitMode = false, dpr = 1;
     let rendition = null, epubBook = null, epubFont = 100;
-    let scrollTimer = null, userScrolling = false;
+    let pageTimer = null, renderTimer = null, lastScrollTop = -1, rafId = null;
 
     const $ = id => document.getElementById(id);
 
@@ -74,38 +77,81 @@
       $('pageInput').value = page;
       $('pageTotal').textContent = pageTotal;
       $('prog').style.width = progress()+'%';
-      $('meta').textContent = mode.toUpperCase()+' · 第 '+page+' 页 / 共 '+pageTotal+' 页';
+      $('meta').textContent = mode.toUpperCase()+' · 第 '+page+' 页 / 共 '+pageTotal+' 页 · st='+Math.round($('stage').scrollTop);
       $('zoomLabel').textContent = mode==='pdf' ? (fitMode?'适宽':Math.round(scale*100)+'%') : (mode==='epub'?epubFont+'%':'正文');
       $('prevBtn').disabled = page <= 1;
       $('nextBtn').disabled = page >= pageTotal;
     }
 
-    // ── Simple scroll-based page detection ──
+    // ── Helper: get element top relative to stage scroll container ──
+    function topInStage(el){
+      const stage = $('stage');
+      return el.offsetTop - stage.offsetTop;
+    }
+
+    // ── Detect which page is currently visible ──
+    function detectCurrentPage(){
+      const stage = $('stage');
+      const st = stage.scrollTop, sh = stage.clientHeight;
+      const target = st + sh * 0.3;
+      if(mode==='text'){
+        const pages = stage.querySelectorAll('.text-page');
+        if(!pages.length) return;
+        let best = 1, bestDist = Infinity;
+        pages.forEach((el,i) => {
+          const dist = Math.abs(topInStage(el) - target);
+          if(dist < bestDist){ bestDist = dist; best = i+1; }
+        });
+        if(best !== page){ page = best; updateUi(); }
+      }else if(mode==='pdf'){
+        const pages = stage.querySelectorAll('.pdf-page');
+        if(!pages.length) return;
+        let best = 1, bestDist = Infinity;
+        pages.forEach((el,i) => {
+          const dist = Math.abs(topInStage(el) - target);
+          if(dist < bestDist){ bestDist = dist; best = i+1; }
+        });
+        if(best !== page){ page = best; updateUi(); }
+      }
+    }
+
+    // ── Scroll handler (also called by rAF monitor) ──
     function onUserScroll(){
-      if(scrollTimer) clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(() => {
-        const stage = $('stage');
-        const st = stage.scrollTop, sh = stage.clientHeight;
-        if(mode==='text'){
-          const pages = stage.querySelectorAll('.text-page');
-          let best = 1, bestDist = Infinity;
-          pages.forEach((el,i) => {
-            const dist = Math.abs(el.offsetTop - st - sh*0.3);
-            if(dist < bestDist){ bestDist = dist; best = i+1; }
-          });
-          if(best !== page){ page = best; updateUi(); }
-        }else if(mode==='pdf'){
-          renderNearbyPdfPages();
-          const pages = stage.querySelectorAll('.pdf-page');
-          let best = 1, bestDist = Infinity;
-          pages.forEach((el,i) => {
-            const dist = Math.abs(el.offsetTop - st - sh*0.3);
-            if(dist < bestDist){ bestDist = dist; best = i+1; }
-          });
-          if(best !== page){ page = best; updateUi(); }
+      if(!pageTimer){
+        pageTimer = setTimeout(() => {
+          pageTimer = null;
+          detectCurrentPage();
+        }, 100);
+      }
+      if(mode==='pdf' && !renderTimer){
+        renderTimer = setTimeout(async () => {
+          renderTimer = null;
+          await renderNearbyPdfPages();
+          detectCurrentPage();
+        }, 400);
+      }
+    }
+
+    // ── rAF-based scroll monitor: works even if scroll events don't fire ──
+    function startRafMonitor(){
+      if(rafId) return;
+      function tick(){
+        try {
+          const stage = $('stage');
+          const st = stage ? stage.scrollTop : 0;
+          if(st !== lastScrollTop){
+            lastScrollTop = st;
+            onUserScroll();
+          }
+        } catch(e) {
+          console.error('reader rAF error:', e);
         }
-        scrollTimer = null;
-      }, 300);
+        rafId = requestAnimationFrame(tick);
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+    function stopRafMonitor(){
+      if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
     }
 
     // ── Init ──
@@ -135,6 +181,9 @@
         $('stage').addEventListener('scroll', onUserScroll, {passive:true});
       }
       updateUi();
+      $('stage').focus({preventScroll:true});
+      detectCurrentPage();
+      startRafMonitor();
     }
 
     // ── PDF: render pages lazily ──
@@ -163,8 +212,17 @@
         $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages">'+html+'</div>';
         updateUi();
 
+        // Register scroll listener for lazy PDF page rendering
+        if(!$('stage')._hasScrollListener){
+          $('stage')._hasScrollListener = true;
+          $('stage').addEventListener('scroll', onUserScroll, {passive:true});
+        }
+
         // Render first pages immediately
         await renderNearbyPdfPages();
+        $('stage').focus({preventScroll:true});
+        detectCurrentPage();
+        startRafMonitor();
       } catch(e) {
         $('stage').innerHTML = '<div class="hint">PDF 加载失败：'+e.message+'<br><small>'+pdfUrl+'</small></div>';
       }
@@ -199,21 +257,24 @@
     async function renderNearbyPdfPages(){
       if(!pdfDoc) return;
       const stage = $('stage');
-      const st = stage.scrollTop, sh = stage.clientHeight;
-      const margin = sh * 2;
-      const placeholders = stage.querySelectorAll('.pdf-placeholder');
-      const toRender = [];
-      for(const el of placeholders){
-        const ot = el.offsetTop;
-        if(ot > st - margin && ot < st + sh + margin){
-          toRender.push(el);
-          if(toRender.length >= 8) break;
+      const BATCH = 4;
+      let safety = 0;
+      while(safety < 50){  // keep rendering while there are nearby placeholders
+        safety++;
+        const st = stage.scrollTop, sh = stage.clientHeight;
+        const margin = sh * 2.5;
+        const placeholders = stage.querySelectorAll('.pdf-placeholder');
+        if(!placeholders.length) break;
+        const batch = [];
+        for(const el of placeholders){
+          const ot = topInStage(el);
+          if(ot > st - margin && ot < st + sh + margin){
+            batch.push(el);
+            if(batch.length >= BATCH) break;
+          }
         }
-      }
-      if(!toRender.length) return;
-      // Render in batches of 3
-      for(let i=0; i<toRender.length; i+=3){
-        await Promise.all(toRender.slice(i,i+3).map(renderOnePdfPage));
+        if(!batch.length) break;
+        await Promise.all(batch.map(renderOnePdfPage));
       }
       const rendered = stage.querySelectorAll('.pdf-page:not(.pdf-placeholder)').length;
       $('meta').textContent = 'PDF · '+pageTotal+' 页 · 已渲染 '+rendered+'/'+pageTotal;
@@ -252,8 +313,8 @@
       const epubEl = document.getElementById('epub');
       if(epubEl){
         epubEl.addEventListener('scroll', () => {
-          if(scrollTimer) clearTimeout(scrollTimer);
-          scrollTimer = setTimeout(() => {
+          if(pageTimer) clearTimeout(pageTimer);
+          pageTimer = setTimeout(() => {
             const ratio = (epubEl.scrollTop+epubEl.clientHeight)/epubEl.scrollHeight;
             const est = Math.max(1, Math.min(pageTotal, Math.ceil(ratio*pageTotal)));
             if(est !== page){ page = est; updateUi(); }
@@ -268,12 +329,12 @@
       const stage = $('stage');
       if(mode==='pdf'){
         const el = document.querySelector('.pdf-page[data-page="'+p+'"]');
-        if(el) stage.scrollTop = el.offsetTop - 24;
+        if(el) stage.scrollTop = topInStage(el) - 24;
       }else if(mode==='text'){
         const el = $('tp'+p);
-        if(el) stage.scrollTop = el.offsetTop - 24;
+        if(el) stage.scrollTop = topInStage(el) - 24;
       }
-      // Also add scroll listener back for manual scroll tracking
+      // Ensure scroll listener is registered for manual scroll tracking
       if(!stage._hasScrollListener){
         stage._hasScrollListener = true;
         stage.addEventListener('scroll', onUserScroll, {passive:true});
