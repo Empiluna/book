@@ -6,337 +6,21 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>在线阅读器</title>
+  <title>在线阅读器 v2</title>
   <style>
-    :root{
-      --bg:#f3eee4;
-      --paper:#fffaf1;
-      --paper-2:#fffdf8;
-      --ink:#1d2430;
-      --muted:#697586;
-      --line:rgba(68,54,35,.14);
-      --brand:#2563eb;
-      --brand-2:#d97706;
-      --shadow:0 22px 70px rgba(43,35,23,.15);
-      font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-      color:var(--ink);
-      background:var(--bg);
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      min-height:100vh;
-      overflow:hidden;
-      background:
-        linear-gradient(180deg,rgba(255,255,255,.56),rgba(255,255,255,0) 36%),
-        radial-gradient(circle at 16% 8%,rgba(217,119,6,.14),transparent 28%),
-        radial-gradient(circle at 84% 10%,rgba(37,99,235,.12),transparent 30%),
-        var(--bg);
-      color:var(--ink);
-    }
-    .reader{
-      height:100vh;
-      display:grid;
-      grid-template-rows:auto 1fr;
-    }
-    .toolbar{
-      position:relative;
-      z-index:5;
-      display:grid;
-      grid-template-columns:minmax(220px,1fr) auto;
-      align-items:center;
-      gap:18px;
-      min-height:78px;
-      padding:12px 22px;
-      border-bottom:1px solid rgba(68,54,35,.1);
-      background:rgba(255,253,248,.88);
-      backdrop-filter:blur(18px);
-      box-shadow:0 14px 36px rgba(43,35,23,.08);
-    }
-    .title{min-width:0}
-    .title h1{
-      margin:0 0 7px;
-      font-size:18px;
-      line-height:1.25;
-      letter-spacing:0;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-    .meta{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      color:var(--muted);
-      font-size:12px;
-      white-space:nowrap;
-      min-width:0;
-    }
-    .meta span{
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-    .progress{
-      width:190px;
-      height:8px;
-      overflow:hidden;
-      border-radius:999px;
-      background:rgba(68,54,35,.12);
-      flex:0 0 auto;
-    }
-    .progress div{
-      height:100%;
-      width:0;
-      border-radius:inherit;
-      background:linear-gradient(90deg,var(--brand-2),var(--brand));
-      transition:width .2s ease;
-    }
-    .tools{
-      display:flex;
-      align-items:center;
-      justify-content:flex-end;
-      gap:8px;
-      flex-wrap:wrap;
-    }
-    button{
-      height:36px;
-      border:1px solid rgba(68,54,35,.12);
-      border-radius:12px;
-      padding:0 13px;
-      background:#1f2937;
-      color:#fff;
-      font-weight:800;
-      font-size:13px;
-      cursor:pointer;
-      line-height:1;
-      transition:transform .16s ease, box-shadow .16s ease, filter .16s ease;
-    }
-    button:hover{
-      transform:translateY(-1px);
-      box-shadow:0 10px 22px rgba(31,41,55,.16);
-    }
-    button:disabled{
-      opacity:.42;
-      cursor:not-allowed;
-      transform:none;
-      box-shadow:none;
-    }
-    .ghost{
-      background:rgba(255,255,255,.74);
-      color:#344054;
-    }
-    .pagebox{
-      height:36px;
-      display:flex;
-      align-items:center;
-      gap:7px;
-      padding:0 10px;
-      border:1px solid rgba(68,54,35,.12);
-      border-radius:12px;
-      background:rgba(255,255,255,.72);
-      color:#667085;
-      font-size:13px;
-      font-weight:800;
-    }
-    .pagebox input{
-      width:48px;
-      height:26px;
-      border:0;
-      border-radius:8px;
-      text-align:center;
-      font-weight:900;
-      background:#fffaf1;
-      color:var(--ink);
-      outline:none;
-    }
-    .zoom{
-      min-width:58px;
-      text-align:center;
-      color:#475467;
-      font-size:13px;
-      font-weight:900;
-    }
-    .stage{
-      position:relative;
-      min-height:0;
-      overflow:auto;
-      padding:28px;
-      scroll-behavior:smooth;
-    }
-    body.epub-mode{overflow:hidden}
-    body.epub-mode .stage{
-      overflow:hidden;
-      display:grid;
-      place-items:center;
-      padding:28px;
-    }
-    .stage:focus{outline:none}
-    .pdf-pages{
-      display:grid;
-      gap:22px;
-      justify-items:center;
-      padding-bottom:48px;
-    }
-    .pdf-page{
-      max-width:100%;
-      overflow:hidden;
-      border-radius:8px;
-      background:#fff;
-      box-shadow:var(--shadow);
-      scroll-margin-top:24px;
-    }
-    canvas{
-      display:block;
-      max-width:100%;
-      height:auto;
-      background:#fff;
-    }
-    .pdf-placeholder{
-      min-height:320px;
-      width:min(760px,100%);
-      display:grid;
-      place-items:center;
-      color:#98a2b3;
-      font-size:14px;
-      border:1px dashed rgba(68,54,35,.18);
-      background:rgba(255,255,255,.72);
-    }
-    .epubbox{
-      width:min(980px,100%);
-      margin:0 auto 54px;
-      overflow:hidden;
-      border:1px solid rgba(68,54,35,.12);
-      border-radius:18px;
-      background:var(--paper-2);
-      box-shadow:var(--shadow);
-    }
-    body.epub-mode .epubbox{
-      height:calc(100vh - 134px);
-      margin:0 auto;
-      overflow-x:hidden;
-      overflow-y:auto;
-      scrollbar-width:thin;
-      scrollbar-color:rgba(31,41,55,.38) transparent;
-    }
-    .epub-chapter{
-      max-width:760px;
-      margin:0 auto;
-      padding:42px 48px;
-      color:#2b2118;
-      font-size:18px;
-      line-height:1.9;
-      word-break:break-word;
-    }
-    .epub-chapter + .epub-chapter{
-      border-top:1px solid rgba(68,54,35,.1);
-    }
-    .epub-chapter p{
-      margin:0 0 1em;
-    }
-    .epub-chapter img,
-    .epub-chapter svg{
-      max-width:100%;
-      height:auto;
-    }
-    .text-pages{
-      width:min(840px,100%);
-      margin:0 auto;
-      display:grid;
-      gap:18px;
-      padding-bottom:60px;
-    }
-    .text-page{
-      padding:38px 44px;
-      border:1px solid rgba(68,54,35,.12);
-      border-radius:18px;
-      background:var(--paper);
-      color:#2b2118;
-      font-size:18px;
-      line-height:1.95;
-      box-shadow:0 18px 50px rgba(43,35,23,.09);
-      scroll-margin-top:24px;
-    }
-    .text-page b{
-      display:block;
-      margin-bottom:14px;
-      color:#92400e;
-      font-size:13px;
-      letter-spacing:.08em;
-    }
-    .text-page p{margin:0}
-    .hint{
-      width:min(760px,calc(100% - 24px));
-      margin:68px auto;
-      padding:24px;
-      border:1px solid rgba(68,54,35,.12);
-      border-radius:18px;
-      background:rgba(255,253,248,.86);
-      color:#667085;
-      line-height:1.75;
-      box-shadow:0 18px 48px rgba(43,35,23,.08);
-    }
-    .night{
-      --bg:#0b1020;
-      --paper:#111827;
-      --paper-2:#0f172a;
-      --ink:#e5e7eb;
-      --muted:#9ca3af;
-      --line:rgba(226,232,240,.13);
-      background:#0b1020;
-      color:#e5e7eb;
-    }
-    .night .toolbar{
-      background:rgba(15,23,42,.9);
-      border-color:rgba(226,232,240,.1);
-      box-shadow:0 14px 36px rgba(0,0,0,.22);
-    }
-    .night .stage{
-      background:radial-gradient(circle at 28% 0,rgba(37,99,235,.14),transparent 28%),#0b1020;
-    }
-    .night .pdf-page,
-    .night .epubbox{
-      filter:invert(.92) hue-rotate(180deg);
-      box-shadow:0 18px 50px rgba(0,0,0,.24);
-    }
-    .night .text-page{
-      background:#111827;
-      color:#e5e7eb;
-      border-color:#243145;
-      box-shadow:0 18px 50px rgba(0,0,0,.24);
-    }
-    .night .text-page b{color:#fbbf24}
-    .night .pagebox,
-    .night .ghost{
-      background:#182235;
-      color:#e5e7eb;
-      border-color:#263449;
-    }
-    .night .pagebox input{
-      background:#0f172a;
-      color:#e5e7eb;
-    }
-    .night .hint{
-      background:#111827;
-      color:#cbd5e1;
-      border-color:#263449;
-    }
-    @media(max-width:860px){
-      body{overflow:auto}
-      .reader{height:auto;min-height:100vh}
-      .toolbar{
-        min-height:0;
-        grid-template-columns:1fr;
-        gap:12px;
-        padding:12px;
-      }
-      .tools{justify-content:flex-start}
-      .stage{height:calc(100vh - 156px);padding:14px}
-      .progress{width:120px}
-      .title h1{font-size:16px}
-      .text-page{padding:26px 22px;font-size:16px;line-height:1.86}
-      button{height:34px;padding:0 11px}
-      .pagebox{height:34px}
-    }
+    :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;color:#17202a;background:#f6f7fb}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f6f7fb;color:#17202a;overflow:hidden}
+    .reader{height:100vh;display:grid;grid-template-rows:auto 1fr;background:#f6f7fb}
+    .toolbar{height:74px;display:grid;grid-template-columns:minmax(180px,1fr) auto;align-items:center;gap:18px;padding:12px 22px;background:rgba(255,255,255,.92);border-bottom:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(15,23,42,.06);z-index:5}
+    .title{min-width:0}.title h1{margin:0 0 5px;font-size:18px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{display:flex;align-items:center;gap:10px;color:#64748b;font-size:12px}.progress{width:180px;height:7px;overflow:hidden;border-radius:999px;background:#e2e8f0}.progress div{height:100%;width:0;background:linear-gradient(90deg,#4f46e5,#06b6d4)}
+    .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    button{border:0;border-radius:12px;padding:9px 12px;background:#312e81;color:#fff;font-weight:800;cursor:pointer;line-height:1}button:hover{filter:brightness(1.06)}button:disabled{opacity:.45;cursor:not-allowed}.ghost{background:#e2e8f0;color:#334155}.pagebox{display:flex;align-items:center;gap:6px;color:#475569;font-size:13px}.pagebox input{width:56px;height:34px;border:1px solid #cbd5e1;border-radius:10px;text-align:center;font-weight:800;background:white;color:#17202a}.zoom{min-width:54px;text-align:center;color:#475569;font-size:13px;font-weight:800}
+    .stage{min-height:0;overflow:auto;padding:24px;background:radial-gradient(circle at 15% 5%,#dbeafe,transparent 34%),radial-gradient(circle at 86% 12%,#ede9fe,transparent 30%),#f8fafc}.stage:focus{outline:none}
+    .pdf-pages{display:grid;gap:18px;justify-items:center}.pdf-page{max-width:100%;background:white;box-shadow:0 18px 46px rgba(15,23,42,.16);scroll-margin-top:24px}canvas{display:block;max-width:100%;height:auto;background:white}.pdf-placeholder{min-height:300px;display:grid;place-items:center;color:#94a3b8;font-size:14px;background:white;border-radius:4px}
+    .epubbox{width:min(980px,100%);margin:0 auto;border:1px solid #e5e7eb;border-radius:18px;background:white;overflow:auto;box-shadow:0 18px 46px rgba(15,23,42,.14)}
+    .text-pages{max-width:860px;margin:0 auto;display:grid;gap:16px;padding-bottom:60px}.text-page{padding:34px 42px;border-radius:18px;background:#fffaf0;border:1px solid rgba(120,113,108,.16);font-size:18px;line-height:1.9;box-shadow:0 16px 38px rgba(15,23,42,.08);scroll-margin-top:24px}.text-page b{display:block;margin-bottom:12px}.hint{max-width:760px;margin:60px auto;padding:22px;border-radius:18px;background:white;color:#64748b;line-height:1.7;box-shadow:0 16px 38px rgba(15,23,42,.08)}
+    .night{background:#020617;color:#e2e8f0}.night .toolbar{background:rgba(15,23,42,.94);border-color:#1e293b}.night .stage{background:#020617}.night .pdf-page,.night .epubbox{filter:invert(.92) hue-rotate(180deg);box-shadow:none}.night .text-page{background:#111827;color:#f8fafc;border-color:#334155}.night .pagebox input{background:#0f172a;color:#e2e8f0;border-color:#334155}.night .ghost{background:#1e293b;color:#e2e8f0}
+    @media(max-width:760px){body{overflow:auto}.reader{height:auto;min-height:100vh}.toolbar{height:auto;grid-template-columns:1fr;padding:12px}.tools{justify-content:flex-start}.stage{height:calc(100vh - 140px);padding:12px}.progress{width:120px}.text-page{padding:24px;font-size:16px}}
   </style>
 </head>
 <body>
@@ -344,7 +28,7 @@
     <header class="toolbar">
       <div class="title">
         <h1 id="title">在线阅读</h1>
-        <div class="meta"><span id="meta">正在加载...</span><div class="progress"><div id="prog"></div></div></div>
+        <div class="meta"><span id="meta">加载中</span><div class="progress"><div id="prog"></div></div></div>
       </div>
       <div class="tools">
         <button id="prevBtn" onclick="prevPage()">上一页</button>
@@ -355,25 +39,28 @@
         <button onclick="zoomIn()">放大</button>
         <button class="ghost" onclick="fitWidth()">适宽</button>
         <button class="ghost" onclick="toggleNight()">夜间</button>
-        <button class="ghost" onclick="saveProgress()">保存进度</button>
+        <button class="ghost" onclick="markRead()">标记已读</button>
       </div>
     </header>
-    <main id="stage" class="stage" tabindex="-1"><div class="hint">正在加载阅读器...</div></main>
+    <main id="stage" class="stage" tabindex="-1"><div class="hint">加载阅读器中...</div></main>
   </div>
 
   <script src="/static/vendor/jszip.min.js?v=3.10.1"></script>
   <script src="/static/vendor/epub.min.js?v=0.3.93"></script>
   <script>
+    console.log('[reader] uni token bridge enabled');
     const API = '/api/v1';
     const params = new URLSearchParams(location.search);
     const bookId = params.get('book_id') || '1';
     const recordFlag = params.get('record');
     const startPage = Math.max(1, Number(params.get('page')) || 1);
-    const token = localStorage.getItem('token') || '';
+    const queryToken = params.get('token') || '';
+    if(queryToken){ try{ localStorage.setItem('token', queryToken); }catch(e){} }
+    const token = queryToken || localStorage.getItem('token') || '';
 
-    let trial = null, mode = 'text', page = 1, pageTotal = 1, pageTotalKnown = true;
+    let trial = null, mode = 'text', page = 1, pageTotal = 1;
     let pdfDoc = null, pdfUrl = null, scale = 3, fitMode = false, dpr = 1;
-    let rendition = null, epubBook = null, epubFont = 100, epubPercent = 0, epubWheelLock = false, touchStartY = null, epubScrollEl = null;
+    let rendition = null, epubBook = null, epubFont = 100;
     let pageTimer = null, renderTimer = null, lastScrollTop = -1, rafId = null;
     let autoSaveTimer = null;
     let lastSavedPage = 0;
@@ -382,6 +69,8 @@
     let readerEnterAt = Date.now();
     let readerReady = false;
     let suppressAutoSave = true;
+    let pdfPageWidth = 0;
+    let pdfPageHeight = 300;
 
     const $ = id => document.getElementById(id);
 
@@ -395,35 +84,27 @@
     }
     function absUrl(url){ return new URL(url, location.origin).href; }
     function allowed(){ return Math.max(1, trial?.allowed_pages || 99999); }
-    function isUnlimited(){ return allowed() >= 90000; }
     function progress(){
-      if(mode === 'epub' && !pageTotalKnown) return Math.min(100, Math.max(1, Math.round(epubPercent * 100)));
-      return pageTotal>0 ? Math.min(100, Math.max(1, Math.round(page/pageTotal*100))) : 0;
-    }
-    function modeLabel(){
-      if(mode === 'pdf') return 'PDF';
-      if(mode === 'epub') return 'EPUB';
-      return '文本';
+      if(pageTotal <= 0) return 0;
+      return Math.min(100, Math.max(0, Math.round((page / pageTotal) * 1000) / 10));
     }
 
     function updateUi(){
       $('pageInput').value = page;
-      const totalLabel = pageTotalKnown ? pageTotal : (mode === 'epub' && isUnlimited() ? '全文' : '-');
-      $('pageTotal').textContent = totalLabel;
+      $('pageTotal').textContent = pageTotal;
       $('prog').style.width = progress()+'%';
-      $('meta').textContent = pageTotalKnown
-        ? modeLabel()+' · 第 '+page+' 页 / 共 '+pageTotal+' 页 · '+progress()+'%'
-        : modeLabel()+' · 第 '+page+' 屏 · '+progress()+'%';
+      $('meta').textContent = mode.toUpperCase()+' · 第 '+page+' 页 / 共 '+pageTotal+' 页 · st='+Math.round($('stage').scrollTop);
       $('zoomLabel').textContent = mode==='pdf' ? (fitMode?'适宽':Math.round(scale*100)+'%') : (mode==='epub'?epubFont+'%':'正文');
       $('prevBtn').disabled = page <= 1;
-      $('nextBtn').disabled = pageTotalKnown && page >= pageTotal;
+      $('nextBtn').disabled = page >= pageTotal;
     }
 
+    // ── Helper: get element top relative to stage scroll container ──
     function topInStage(el){
-      const stage = $('stage');
-      return el.offsetTop - stage.offsetTop;
+      return el.offsetTop;
     }
 
+    // ── Detect which page is currently visible ──
     function detectCurrentPage(){
       const stage = $('stage');
       const st = stage.scrollTop, sh = stage.clientHeight;
@@ -449,6 +130,7 @@
       }
     }
 
+    // ── Scroll handler (also called by rAF monitor) ──
     function onUserScroll(){
       if(!pageTimer){
         pageTimer = setTimeout(() => {
@@ -465,14 +147,19 @@
       }
     }
 
+    // ── rAF-based scroll monitor: works even if scroll events don't fire ──
     function startRafMonitor(){
       if(rafId) return;
       function tick(){
-        const stage = $('stage');
-        const st = stage ? stage.scrollTop : 0;
-        if(st !== lastScrollTop){
-          lastScrollTop = st;
-          onUserScroll();
+        try {
+          const stage = $('stage');
+          const st = stage ? stage.scrollTop : 0;
+          if(st !== lastScrollTop){
+            lastScrollTop = st;
+            onUserScroll();
+          }
+        } catch(e) {
+          console.error('reader rAF error:', e);
         }
         rafId = requestAnimationFrame(tick);
       }
@@ -482,10 +169,11 @@
       if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
     }
 
+    // ── Init ──
     async function init(){
       try{
         trial = await api('/ecosystem/trial/'+bookId+(recordFlag==='0'?'?record=0':''));
-        $('title').textContent = (trial.book?.title || '在线阅读') + ' · 在线阅读';
+        $('title').textContent = trial.book.title + ' · 在线阅读';
         mode = trial.content_type;
         if(mode==='pdf' && trial.pdf_url) return await loadPdf(trial.pdf_url);
         if(mode==='epub' && trial.epub_url) return await loadEpub(trial.epub_url);
@@ -495,9 +183,9 @@
       }
     }
 
+    // ── Text ──
     function renderText(){
-      document.body.classList.remove('epub-mode');
-      mode='text'; page=1; pageTotalKnown = true;
+      mode='text'; page=1;
       const pages = trial.pages || [];
       pageTotal = pages.length || 1;
       $('stage').innerHTML = '<div class="text-pages">'+pages.map(p =>
@@ -514,40 +202,48 @@
       jumpToInitialPage();
     }
 
+    // ── PDF: render pages lazily ──
     async function loadPdf(url){
-      document.body.classList.remove('epub-mode');
-      pdfUrl = absUrl(url); mode='pdf'; page=1;
-      $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages"><div class="hint">PDF 正在加载...</div></div>';
+      pdfUrl = absUrl(url);
+      mode = 'pdf';
+      page = 1;
+      $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages"><div class="hint">PDF 加载中...</div></div>';
       try {
         const pdfjsLib = await import('/static/vendor/pdf.min.mjs?v=4.10.38');
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/vendor/pdf.worker.min.mjs?v=4.10.38';
         pdfDoc = await pdfjsLib.getDocument({url:pdfUrl}).promise;
         pageTotal = Math.min(pdfDoc.numPages, allowed());
-        pageTotalKnown = true;
         dpr = Math.min(window.devicePixelRatio||1, 2);
 
+        const fp = await pdfDoc.getPage(1);
+        const host = $('stage');
+        const avail = Math.max(320, host.clientWidth-48);
+
         if(fitMode){
-          const fp = await pdfDoc.getPage(1);
-          const host = $('stage');
-          const avail = Math.max(320, host.clientWidth-56);
           scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
         }
 
+        const firstViewport = fp.getViewport({scale});
+        const dw = fitMode ? Math.min(1120, avail) : firstViewport.width;
+        const dh = firstViewport.height * (dw / firstViewport.width);
+        pdfPageWidth = Math.floor(dw);
+        pdfPageHeight = Math.floor(dh);
+
         let html = '';
         for(let i=1; i<=pageTotal; i++){
-          html += '<div class="pdf-page pdf-placeholder" data-page="'+i+'">第 '+i+' 页</div>';
+          html += `<div class="pdf-page pdf-placeholder" data-page="${i}" style="width:${pdfPageWidth}px;min-height:${pdfPageHeight}px">第 ${i} 页</div>`;
         }
         $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages">'+html+'</div>';
-        updateUi();
 
         if(!$('stage')._hasScrollListener){
           $('stage')._hasScrollListener = true;
           $('stage').addEventListener('scroll', onUserScroll, {passive:true});
         }
 
+        updateUi();
+        await renderPdfPageByNumber(1);
         await renderNearbyPdfPages();
         $('stage').focus({preventScroll:true});
-        detectCurrentPage();
         startRafMonitor();
         await jumpToInitialPage();
       } catch(e) {
@@ -560,10 +256,13 @@
       try {
         const pdfPage = await pdfDoc.getPage(pn);
         const host = $('stage');
-        const avail = Math.max(320, host.clientWidth-56);
+        const avail = Math.max(320, host.clientWidth-48);
         const viewport = pdfPage.getViewport({scale});
         const dw = fitMode ? Math.min(1120, avail) : viewport.width;
         const dh = viewport.height * (dw/viewport.width);
+
+        el.style.width = Math.floor(dw)+'px';
+        el.style.minHeight = Math.floor(dh)+'px';
 
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(viewport.width*dpr);
@@ -578,10 +277,30 @@
         el.innerHTML = '';
         el.appendChild(canvas);
         return true;
-      } catch(e) {
-        el.textContent = '渲染失败';
-        return false;
+      } catch(e) { el.textContent = '渲染失败'; return false; }
+    }
+
+    function wait(ms){
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function renderPdfPageByNumber(p){
+      if(!pdfDoc) return;
+      const pageNo = Math.min(pageTotal, Math.max(1, Number(p) || 1));
+      const el = document.querySelector(`.pdf-page[data-page="${pageNo}"]`);
+      if(el && el.classList.contains('pdf-placeholder')){
+        await renderOnePdfPage(el);
       }
+    }
+
+    async function renderPdfRangeAround(p){
+      if(!pdfDoc) return;
+      const pageNo = Math.min(pageTotal, Math.max(1, Number(p) || 1));
+      const tasks = [];
+      for(let i=Math.max(1, pageNo-1); i<=Math.min(pageTotal, pageNo+1); i++){
+        tasks.push(renderPdfPageByNumber(i));
+      }
+      await Promise.all(tasks);
     }
 
     async function renderNearbyPdfPages(){
@@ -589,7 +308,7 @@
       const stage = $('stage');
       const BATCH = 4;
       let safety = 0;
-      while(safety < 50){
+      while(safety < 50){  // keep rendering while there are nearby placeholders
         safety++;
         const st = stage.scrollTop, sh = stage.clientHeight;
         const margin = sh * 2.5;
@@ -606,268 +325,70 @@
         if(!batch.length) break;
         await Promise.all(batch.map(renderOnePdfPage));
       }
+      const rendered = stage.querySelectorAll('.pdf-page:not(.pdf-placeholder)').length;
+      $('meta').textContent = 'PDF · '+pageTotal+' 页 · 已渲染 '+rendered+'/'+pageTotal;
     }
 
+    // Quick rescale for zoom (clear canvases, re-render visible)
     async function quickReloadPdf(){
       if(!pdfDoc) return;
       const stage = $('stage');
+      const fp = await pdfDoc.getPage(1);
+      const avail = Math.max(320, stage.clientWidth-48);
+      const viewport = fp.getViewport({scale});
+      const dw = fitMode ? Math.min(1120, avail) : viewport.width;
+      const dh = viewport.height * (dw/viewport.width);
+      pdfPageWidth = Math.floor(dw);
+      pdfPageHeight = Math.floor(dh);
       const all = stage.querySelectorAll('.pdf-page');
       all.forEach(el => {
         el.innerHTML = '';
         el.classList.add('pdf-placeholder');
+        el.style.width = pdfPageWidth+'px';
+        el.style.minHeight = pdfPageHeight+'px';
         el.textContent = '第 '+el.dataset.page+' 页';
       });
       updateUi();
       await renderNearbyPdfPages();
     }
 
+    // ── EPUB ──
     async function loadEpub(url){
-      document.body.classList.add('epub-mode');
-      mode='epub'; page=1; pageTotal=0; pageTotalKnown = false; epubPercent = 0; epubScrollEl = null; rendition = null; epubBook = null;
-      $('stage').innerHTML = '<div id="epub" class="epubbox"><div class="hint">EPUB 正在加载...</div></div>';
+      mode='epub'; page=1; pageTotal=allowed();
+      $('stage').innerHTML = '<div id="epub" class="epubbox" style="height:calc(100vh - 122px)"><div class="hint">EPUB 加载中...</div></div>';
       const res = await fetch(absUrl(url));
-      if(!res.ok) throw new Error('EPUB 读取失败：'+res.status);
-      await renderEpubHtml(await res.arrayBuffer());
+      if(!res.ok) throw new Error('EPUB读取失败：'+res.status);
+      epubBook = ePub(await res.arrayBuffer(), {openAs:'binary'});
+      rendition = epubBook.renderTo('epub', {width:'100%', height:'100%', flow:'scrolled-doc', manager:'default'});
+      rendition.themes.default({body:{'font-size':epubFont+'%', 'line-height':'1.75'}, p:{'line-height':'1.75'}});
+      await rendition.display();
+      document.querySelector('#epub > .hint')?.remove();
+
+      rendition.on('relocated', loc => {
+        const total = epubBook.locations.total || pageTotal;
+        pageTotal = Math.min(total, allowed());
+        page = Math.min(pageTotal, (loc.start.index||0)+1);
+        updateUi();
+        scheduleAutoSave();
+      });
+
+      // EPUB scroll tracking
+      const epubEl = document.getElementById('epub');
+      if(epubEl){
+        epubEl.addEventListener('scroll', () => {
+          if(pageTimer) clearTimeout(pageTimer);
+          pageTimer = setTimeout(() => {
+            const ratio = (epubEl.scrollTop+epubEl.clientHeight)/epubEl.scrollHeight;
+            const est = Math.max(1, Math.min(pageTotal, Math.ceil(ratio*pageTotal)));
+            if(est !== page){ page = est; updateUi(); scheduleAutoSave(); }
+          }, 300);
+        }, {passive:true});
+      }
       updateUi();
       await jumpToInitialPage();
     }
 
-    function dirname(path){
-      const idx = path.lastIndexOf('/');
-      return idx >= 0 ? path.slice(0, idx + 1) : '';
-    }
-
-    function normalizePath(path){
-      const out = [];
-      path.split('/').forEach(part => {
-        if(!part || part === '.') return;
-        if(part === '..') out.pop();
-        else out.push(part);
-      });
-      return out.join('/');
-    }
-
-    function mediaMime(path){
-      const ext = path.split('.').pop().toLowerCase();
-      if(ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
-      if(ext === 'png') return 'image/png';
-      if(ext === 'gif') return 'image/gif';
-      if(ext === 'webp') return 'image/webp';
-      if(ext === 'svg') return 'image/svg+xml';
-      return 'application/octet-stream';
-    }
-
-    async function epubDataUrl(zip, path){
-      const file = zip.file(path);
-      if(!file) return null;
-      const base64 = await file.async('base64');
-      return `data:${mediaMime(path)};base64,${base64}`;
-    }
-
-    async function resolveEpubAsset(zip, base, raw){
-      if(!raw || raw.startsWith('data:') || raw.startsWith('http:') || raw.startsWith('https:') || raw.startsWith('#')) return raw;
-      const [pathPart, anchor = ''] = raw.split('#');
-      const assetPath = normalizePath(base + pathPart);
-      const dataUrl = await epubDataUrl(zip, assetPath);
-      return dataUrl ? dataUrl + (anchor ? `#${anchor}` : '') : raw;
-    }
-
-    async function inlineEpubCssAssets(zip, base, css){
-      const matches = [...css.matchAll(/url\((['"]?)([^'")]+)\1\)/g)];
-      let output = css;
-      for(const match of matches){
-        const dataUrl = await resolveEpubAsset(zip, base, match[2]);
-        if(dataUrl && dataUrl !== match[2]) output = output.replace(match[0], `url("${dataUrl}")`);
-      }
-      return output;
-    }
-
-    async function renderEpubHtml(buffer){
-      const zip = await JSZip.loadAsync(buffer);
-      const parser = new DOMParser();
-      const containerText = await zip.file('META-INF/container.xml').async('text');
-      const containerDoc = parser.parseFromString(containerText, 'application/xml');
-      const rootPath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
-      if(!rootPath) throw new Error('EPUB 缺少 OPF 入口');
-
-      const opfText = await zip.file(rootPath).async('text');
-      const opfDoc = parser.parseFromString(opfText, 'application/xml');
-      const base = dirname(rootPath);
-      const manifest = {};
-      opfDoc.querySelectorAll('manifest item').forEach(item => {
-        manifest[item.getAttribute('id')] = item.getAttribute('href');
-      });
-      const spine = [...opfDoc.querySelectorAll('spine itemref')]
-        .map(item => manifest[item.getAttribute('idref')])
-        .filter(Boolean)
-        .map(href => normalizePath(base + href));
-
-      const chapters = [];
-      for(const chapterPath of spine){
-        const file = zip.file(chapterPath);
-        if(!file) continue;
-        const text = await file.async('text');
-        const doc = parser.parseFromString(text, 'text/html');
-        doc.querySelectorAll('script, iframe, object').forEach(el => el.remove());
-        const chapterBase = dirname(chapterPath);
-
-        for(const link of [...doc.querySelectorAll('link[rel~="stylesheet"][href]')]){
-          const href = link.getAttribute('href');
-          const cssPath = normalizePath(chapterBase + href.split('#')[0]);
-          const cssFile = zip.file(cssPath);
-          if(!cssFile) {
-            link.remove();
-            continue;
-          }
-          const style = doc.createElement('style');
-          style.textContent = await inlineEpubCssAssets(zip, dirname(cssPath), await cssFile.async('text'));
-          link.replaceWith(style);
-        }
-
-        for(const el of [...doc.querySelectorAll('img[src], source[srcset]')]){
-          if(el.hasAttribute('src')){
-            const resolved = await resolveEpubAsset(zip, chapterBase, el.getAttribute('src'));
-            if(resolved) el.setAttribute('src', resolved);
-          }
-          if(el.hasAttribute('srcset')){
-            const parts = [];
-            for(const item of el.getAttribute('srcset').split(',')){
-              const bits = item.trim().split(/\s+/);
-              if(!bits[0]) continue;
-              bits[0] = await resolveEpubAsset(zip, chapterBase, bits[0]);
-              parts.push(bits.join(' '));
-            }
-            el.setAttribute('srcset', parts.join(', '));
-          }
-        }
-
-        for(const el of [...doc.querySelectorAll('image')]){
-          const raw = el.getAttribute('href') || el.getAttribute('xlink:href');
-          const resolved = await resolveEpubAsset(zip, chapterBase, raw);
-          if(resolved){
-            el.setAttribute('href', resolved);
-            el.setAttribute('xlink:href', resolved);
-          }
-        }
-
-        for(const el of [...doc.querySelectorAll('[style]')]){
-          el.setAttribute('style', await inlineEpubCssAssets(zip, chapterBase, el.getAttribute('style')));
-        }
-        const body = doc.body || doc.documentElement;
-        const html = body?.innerHTML?.trim();
-        if(html) chapters.push(`<article class="epub-chapter">${html}</article>`);
-      }
-
-      const epubEl = document.getElementById('epub');
-      epubEl.innerHTML = chapters.join('') || '<div class="hint">EPUB 暂无可显示内容</div>';
-      epubScrollEl = epubEl;
-      pageTotalKnown = false;
-      setTimeout(() => {
-        const max = Math.max(1, epubEl.scrollHeight - epubEl.clientHeight);
-        pageTotal = Math.max(1, Math.ceil(max / Math.max(360, epubEl.clientHeight * .86)));
-        pageTotalKnown = true;
-        syncEpubScrollProgress();
-      }, 80);
-      bindEpubPagingGestures();
-      bindEpubBoxScroll();
-    }
-
-    function bindEpubBoxScroll(){
-      const epubEl = document.getElementById('epub');
-      if(!epubEl || epubEl._hasReaderScroll) return;
-      epubEl._hasReaderScroll = true;
-      if(!epubScrollEl) epubScrollEl = epubEl;
-      epubEl.addEventListener('scroll', () => {
-        epubScrollEl = epubEl;
-        if(pageTimer) clearTimeout(pageTimer);
-        pageTimer = setTimeout(syncEpubScrollProgress, 80);
-      }, {passive:true});
-    }
-
-    function epubCanScroll(direction){
-      if(!epubScrollEl) return false;
-      const max = epubScrollEl.scrollHeight - epubScrollEl.clientHeight;
-      if(max <= 6) return false;
-      return direction > 0 ? epubScrollEl.scrollTop < max - 6 : epubScrollEl.scrollTop > 6;
-    }
-
-    async function turnEpub(direction){
-      if(!epubScrollEl) epubScrollEl = document.getElementById('epub');
-      if(!epubScrollEl && !rendition) return;
-      if(epubCanScroll(direction)){
-        const delta = direction > 0 ? epubScrollEl.clientHeight * .86 : -epubScrollEl.clientHeight * .86;
-        epubScrollEl.scrollTop = Math.max(0, Math.min(epubScrollEl.scrollHeight - epubScrollEl.clientHeight, epubScrollEl.scrollTop + delta));
-        syncEpubScrollProgress();
-        return;
-      }
-      if(!rendition) return;
-      if(direction > 0) await rendition.next();
-      else await rendition.prev();
-      setTimeout(syncEpubScrollProgress, 260);
-    }
-
-    async function handleEpubWheel(deltaY, event){
-      if(mode !== 'epub') return;
-      if(event?.preventDefault) event.preventDefault();
-      if(epubWheelLock || Math.abs(deltaY) < 18) return;
-      epubWheelLock = true;
-      await turnEpub(deltaY > 0 ? 1 : -1);
-      setTimeout(() => { epubWheelLock = false; }, 420);
-    }
-
-    function syncEpubScrollProgress(){
-      if(!epubScrollEl) return;
-      const max = Math.max(1, epubScrollEl.scrollHeight - epubScrollEl.clientHeight);
-      epubPercent = Math.min(1, Math.max(0, epubScrollEl.scrollTop / max));
-      if(pageTotalKnown && pageTotal > 0){
-        page = Math.min(pageTotal, Math.max(1, Math.ceil(epubPercent * pageTotal)));
-      }else{
-        page = Math.max(1, Math.ceil(epubPercent * 100));
-      }
-      updateUi();
-      scheduleAutoSave();
-    }
-
-    function bindEpubPagingGestures(){
-      const stage = $('stage');
-      if(stage._hasEpubGestures) return;
-      stage._hasEpubGestures = true;
-      stage.addEventListener('wheel', e => {
-        handleEpubWheel(e.deltaY, e);
-      }, {passive:false});
-      stage.addEventListener('touchstart', e => {
-        if(mode !== 'epub') return;
-        touchStartY = e.touches[0]?.clientY ?? null;
-      }, {passive:true});
-      stage.addEventListener('touchend', e => {
-        if(mode !== 'epub' || touchStartY === null) return;
-        const endY = e.changedTouches[0]?.clientY ?? touchStartY;
-        const delta = touchStartY - endY;
-        touchStartY = null;
-        if(Math.abs(delta) < 36) return;
-        if(delta > 0) nextPage();
-        else prevPage();
-      }, {passive:true});
-    }
-
-    function bindEpubContentGestures(view){
-      const doc = view?.document;
-      if(!doc || doc._readerGesturesBound) return;
-      doc._readerGesturesBound = true;
-      epubScrollEl = doc.scrollingElement || doc.documentElement || doc.body;
-      doc.addEventListener('scroll', () => {
-        if(pageTimer) clearTimeout(pageTimer);
-        pageTimer = setTimeout(syncEpubScrollProgress, 80);
-      }, {passive:true});
-      doc.addEventListener('touchstart', e => {
-        touchStartY = e.touches[0]?.clientY ?? null;
-      }, {passive:true});
-      doc.addEventListener('touchend', e => {
-        touchStartY = null;
-      }, {passive:true});
-      setTimeout(syncEpubScrollProgress, 120);
-    }
-
+    // ── Navigation (manual scrollTop to avoid parent scroll propagation) ──
     function scrollToPage(p){
       const stage = $('stage');
       if(mode==='pdf'){
@@ -877,38 +398,38 @@
         const el = $('tp'+p);
         if(el) stage.scrollTop = topInStage(el) - 24;
       }
+      // Ensure scroll listener is registered for manual scroll tracking
       if(!stage._hasScrollListener){
         stage._hasScrollListener = true;
         stage.addEventListener('scroll', onUserScroll, {passive:true});
       }
     }
 
-    function wait(ms){
-      return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
     async function jumpToInitialPage(){
       suppressAutoSave = true;
       readerReady = false;
 
-      await wait(mode === 'epub' ? 260 : 120);
-      const total = Math.max(1, pageTotal || startPage || 1);
-      const targetPage = Math.min(total, Math.max(1, startPage || 1));
+      const targetPage = Math.min(pageTotal, Math.max(1, startPage || 1));
       page = targetPage;
 
-      if(mode === 'epub'){
-        if(epubScrollEl && pageTotalKnown && pageTotal > 1){
-          const max = Math.max(0, epubScrollEl.scrollHeight - epubScrollEl.clientHeight);
-          epubScrollEl.scrollTop = max * ((targetPage - 1) / Math.max(1, pageTotal - 1));
-          syncEpubScrollProgress();
-        }
+      await wait(350);
+
+      if(mode === 'pdf'){
+        await renderPdfRangeAround(targetPage);
+        scrollToPage(targetPage);
+        await wait(250);
+        await renderNearbyPdfPages();
+      }else if(mode === 'epub' && rendition){
+        await rendition.display(targetPage - 1);
       }else{
         scrollToPage(targetPage);
-        if(mode === 'pdf') await renderNearbyPdfPages();
       }
 
+      page = targetPage;
       updateUi();
-      await wait(350);
+
+      await wait(500);
+
       lastSavedPage = page;
       lastSavedProgress = progress();
       lastSavedAt = Date.now();
@@ -917,10 +438,6 @@
     }
 
     function goPage(){
-      if(mode === 'epub' && !pageTotalKnown){
-        updateUi();
-        return;
-      }
       const next = Math.min(pageTotal, Math.max(1, Number($('pageInput').value)||1));
       page = next;
       if(mode==='epub' && rendition){ rendition.display(next-1); }
@@ -929,32 +446,25 @@
       scheduleAutoSave();
     }
 
-    async function nextPage(){
-      if(pageTotalKnown && page >= pageTotal) return;
-      if(mode==='epub'){
-        await turnEpub(1);
-        return;
-      }
+    function nextPage(){
+      if(page >= pageTotal) return;
       page++;
-      if(mode==='epub' && rendition){ await rendition.next(); }
+      if(mode==='epub' && rendition){ rendition.next(); }
       else { scrollToPage(page); }
       updateUi();
       scheduleAutoSave();
     }
 
-    async function prevPage(){
-      if(mode==='epub'){
-        await turnEpub(-1);
-        return;
-      }
+    function prevPage(){
       if(page <= 1) return;
       page--;
-      if(mode==='epub' && rendition){ await rendition.prev(); }
+      if(mode==='epub' && rendition){ rendition.prev(); }
       else { scrollToPage(page); }
       updateUi();
       scheduleAutoSave();
     }
 
+    // ── Zoom ──
     async function zoomIn(){
       if(mode==='pdf'){
         fitMode = false; scale = Math.min(scale+0.25, 4);
@@ -976,15 +486,13 @@
       updateUi();
     }
     async function fitWidth(){
-      if(mode==='pdf' && pdfDoc){
+      if(mode==='pdf'){
         fitMode = true;
         const host = $('stage');
-        const avail = Math.max(320, host.clientWidth-56);
+        const avail = Math.max(320, host.clientWidth-48);
         const fp = await pdfDoc.getPage(1);
         scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
-        page=1;
-        await quickReloadPdf();
-        $('stage').scrollTop=0;
+        if(pdfDoc){ page=1; await quickReloadPdf(); $('stage').scrollTop=0; }
         updateUi();
       }
     }
@@ -999,18 +507,21 @@
       }, 900);
     }
 
-    async function saveProgress(showTip=true, force=false, overrideProgress=null){
-      if(!token){
-        if(showTip) alert('??????????');
-        return;
-      }
+    async function saveProgress(showTip=false, force=false, overrideProgress=null){
+      if(!token) return;
       if(!force && (!readerReady || suppressAutoSave)) return;
 
       const now = Date.now();
       const currentProgress = overrideProgress !== null ? overrideProgress : progress();
 
-      if(!force && page <= 1 && lastSavedProgress > 1) return;
-      if(!force && lastSavedProgress > 1 && currentProgress + 0.1 < lastSavedProgress) return;
+      if(!force && page <= 1 && lastSavedProgress > 1){
+        return;
+      }
+
+      if(!force && lastSavedProgress > 1 && currentProgress + 0.1 < lastSavedProgress){
+        return;
+      }
+
       if(
         !force &&
         page === lastSavedPage &&
@@ -1020,41 +531,52 @@
         return;
       }
 
-      try{
-        const minutes = Math.max(0, Math.round((now - readerEnterAt) / 60000));
-        await api('/user/progress/'+bookId, {
-          method:'POST',
-          body:JSON.stringify({
-            current_page:page,
-            progress_percent:currentProgress,
-            reading_minutes:minutes,
-            last_device:'Web Reader'
-          })
-        });
+      const minutes = Math.max(0, Math.round((now - readerEnterAt) / 60000));
 
-        lastSavedPage = page;
-        lastSavedProgress = currentProgress;
-        lastSavedAt = now;
-        readerEnterAt = now;
-
-        window.parent?.postMessage({
-          type:'reader-progress-saved',
-          book_id:Number(bookId),
+      await api('/user/progress/'+bookId, {
+        method:'POST',
+        body:JSON.stringify({
           current_page:page,
-          progress_percent:currentProgress
-        }, '*');
+          progress_percent:currentProgress,
+          reading_minutes:minutes,
+          last_device:'Web Reader'
+        })
+      });
 
-        if(showTip) alert('????????'+Math.round(currentProgress)+'%');
-      }catch(e){
-        if(showTip) alert('??????????');
-        throw e;
+      lastSavedPage = page;
+      lastSavedProgress = currentProgress;
+      lastSavedAt = now;
+      readerEnterAt = now;
+
+      window.parent?.postMessage({
+        type:'reader-progress-saved',
+        book_id:Number(bookId),
+        current_page:page,
+        progress_percent:currentProgress
+      }, '*');
+
+      if(showTip){
+        alert('阅读进度已自动保存：'+Math.round(currentProgress)+'%');
       }
     }
 
+    async function markRead(){
+      page = pageTotal;
+      if(mode === 'epub' && rendition){
+        rendition.display(pageTotal - 1);
+      }else{
+        scrollToPage(pageTotal);
+      }
+      updateUi();
+      await saveProgress(true, true, 100);
+      alert('已标记为已读');
+    }
+
+    // Resize handler for PDF
     window.addEventListener('resize', () => {
       if(mode==='pdf' && fitMode && pdfDoc){
         const host = $('stage');
-        const avail = Math.max(320, host.clientWidth-56);
+        const avail = Math.max(320, host.clientWidth-48);
         pdfDoc.getPage(1).then(fp => {
           scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
           quickReloadPdf();
