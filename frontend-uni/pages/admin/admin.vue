@@ -1,51 +1,84 @@
 <template>
-  <view class="page">
-    <view class="hero">
-      <text class="eyebrow">Admin Console</text>
-      <text class="title">管理后台</text>
-      <text class="desc">集中处理运营总览、图书、用户、评论、知识图谱和系统配置。</text>
+  <view class="container">
+    <view class="card">
+      <text class="title">移动端管理后台</text>
+      <text class="muted">提供数据总览、用户、评论、推荐权重和图谱同步等常用管理功能。复杂图书编辑仍建议使用网页后台。</text>
+      <button class="btn" @click="load">刷新数据</button>
     </view>
-    <view class="grid">
-      <view class="tile primary" @click="go('/admin/dashboard')">
-        <text class="tile-title">数据总览</text>
-        <text class="tile-desc">指标、热门图书、分类分布</text>
+
+    <view v-if="!admin" class="card">
+      <text class="muted">当前账号不是管理员，请使用管理员账号登录后查看。</text>
+      <button class="btn" @click="goLogin">去登录</button>
+    </view>
+
+    <view v-if="error" class="card"><text class="muted">{{ error }}</text></view>
+
+    <view v-if="admin && dashboard" class="card">
+      <text class="title">数据总览</text>
+      <view class="stat-grid">
+        <view class="stat-item"><text class="stat-num">{{ d('users') }}</text><text class="muted">用户</text></view>
+        <view class="stat-item"><text class="stat-num">{{ d('books') }}</text><text class="muted">图书</text></view>
+        <view class="stat-item"><text class="stat-num">{{ d('comments') }}</text><text class="muted">评论</text></view>
+        <view class="stat-item"><text class="stat-num">{{ d('feedbacks') }}</text><text class="muted">反馈</text></view>
       </view>
-      <view class="tile" @click="go('/admin/books')">
-        <text class="tile-title">图书管理</text>
-        <text class="tile-desc">新增、编辑、删除、索引重建</text>
+    </view>
+
+    <view v-if="admin" class="card">
+      <text class="title">快捷操作</text>
+      <button class="btn" @click="syncGraph">同步知识图谱</button>
+      <button class="btn secondary" @click="precompute">预计算 ItemCF</button>
+      <button class="btn secondary" @click="openWebAdmin">打开网页后台地址</button>
+    </view>
+
+    <view v-if="admin" class="card">
+      <text class="title">用户管理</text>
+      <view class="search-row"><input class="input" v-model="userQ" placeholder="搜索用户" /><button class="btn small" @click="loadUsers">搜索</button></view>
+      <view class="user" v-for="u in users" :key="u.id">
+        <text class="user-name">{{ u.username }} · {{ u.is_admin ? '管理员' : '用户' }}</text>
+        <text class="muted">{{ u.email || '' }} · {{ u.is_active ? '启用' : '禁用' }}</text>
+        <view class="row-actions"><button class="btn secondary small" @click="toggleUser(u)">{{ u.is_active ? '禁用' : '启用' }}</button><button class="btn secondary small" @click="toggleRole(u)">{{ u.is_admin ? '转用户' : '设管理员' }}</button></view>
       </view>
-      <view class="tile" @click="go('/admin/users')">
-        <text class="tile-title">用户管理</text>
-        <text class="tile-desc">搜索、启用、禁用、导出</text>
-      </view>
-      <view class="tile" @click="go('/admin/comments')">
-        <text class="tile-title">评论管理</text>
-        <text class="tile-desc">筛选、置顶、删除</text>
-      </view>
-      <view class="tile" @click="go('/admin/graph')">
-        <text class="tile-title">知识图谱</text>
-        <text class="tile-desc">同步、关系、Cypher 控制台</text>
-      </view>
-      <view class="tile" @click="go('/admin/settings')">
-        <text class="tile-title">系统设置</text>
-        <text class="tile-desc">推荐权重、系统配置</text>
+    </view>
+
+    <view v-if="admin" class="card">
+      <text class="title">评论管理</text>
+      <view class="comment" v-for="c in comments" :key="c.id">
+        <text class="comment-title">{{ c.book_title || '图书' }} · {{ c.nickname || c.username }}</text>
+        <text class="muted">{{ c.content }}</text>
+        <view class="row-actions"><button class="btn secondary small" @click="pinComment(c)">置顶/取消</button><button class="btn danger small" @click="deleteComment(c)">删除</button></view>
       </view>
     </view>
   </view>
 </template>
-
-<script setup>
-import { onShow } from '@dcloudio/uni-app'
-import { requireAdminPage } from '../../utils/admin'
-
-function go(url) {
-  if (!requireAdminPage()) return
-  uni.navigateTo({ url })
+<script>
+import { request, getUser, isAdmin, ORIGIN, showError } from '../../api/request.js'
+export default {
+  data: function () { return { admin: false, dashboard: null, users: [], comments: [], userQ: '', error: '' } },
+  onShow: function () { this.admin = isAdmin(); if (this.admin) this.load() },
+  methods: {
+    d: function (key) { return (this.dashboard && ((this.dashboard.cards && this.dashboard.cards[key]) || this.dashboard[key] || this.dashboard[key + '_count'])) || 0 },
+    load: function () {
+      const that = this; that.error = ''
+      if (!isAdmin()) { that.admin = false; return }
+      that.admin = true
+      Promise.all([request('/admin/dashboard'), request('/admin/users'), request('/ecosystem/admin/comments?limit=20')]).then(function (res) {
+        that.dashboard = res[0] || {}
+        that.users = (res[1] && res[1].items) || []
+        that.comments = (res[2] && res[2].items) || []
+      }).catch(function (e) { that.error = e.message || '管理数据加载失败' })
+    },
+    loadUsers: function () { const that = this; request('/admin/users' + (that.userQ ? '?q=' + encodeURIComponent(that.userQ) : '')).then(function (res) { that.users = (res && res.items) || [] }).catch(function (e) { showError(e, '用户加载失败') }) },
+    toggleUser: function (u) { const that = this; request('/admin/users/' + u.id + '/status', { method: 'PUT', data: { is_active: !u.is_active } }).then(function () { that.loadUsers() }).catch(function (e) { showError(e, '操作失败') }) },
+    toggleRole: function (u) { const that = this; request('/admin/users/' + u.id + '/role', { method: 'PUT', data: { is_admin: !u.is_admin } }).then(function () { that.loadUsers() }).catch(function (e) { showError(e, '操作失败') }) },
+    pinComment: function (c) { const that = this; request('/ecosystem/admin/comments/' + c.id + '/pin', { method: 'POST' }).then(function () { that.load() }).catch(function (e) { showError(e, '操作失败') }) },
+    deleteComment: function (c) { const that = this; uni.showModal({ title: '确认删除', content: '确定删除这条评论吗？', success: function (res) { if (res.confirm) request('/ecosystem/admin/comments/' + c.id, { method: 'DELETE' }).then(function () { that.load() }).catch(function (e) { showError(e, '删除失败') }) } }) },
+    syncGraph: function () { request('/graph/admin/sync', { method: 'POST' }).then(function () { uni.showToast({ title: '已同步' }) }).catch(function (e) { showError(e, '同步失败') }) },
+    precompute: function () { request('/recommend/admin/precompute-itemcf', { method: 'POST' }).then(function () { uni.showToast({ title: '已完成' }) }).catch(function (e) { showError(e, '操作失败') }) },
+    goLogin: function () { uni.navigateTo({ url: '/pages/login/login' }) },
+    openWebAdmin: function () { uni.showModal({ title: '网页后台地址', content: ORIGIN + '/admin', showCancel: false }) }
+  }
 }
-
-onShow(requireAdminPage)
 </script>
-
 <style scoped>
-.page{min-height:100vh;background:#f6f7fb;padding:28rpx}.hero{background:#fff;border-radius:28rpx;padding:34rpx;margin-bottom:22rpx;box-shadow:0 22rpx 60rpx rgba(15,23,42,.08)}.eyebrow{display:block;color:#4f46e5;font-size:22rpx;font-weight:900;text-transform:uppercase}.title{display:block;color:#111827;font-size:46rpx;font-weight:900;margin-top:8rpx}.desc{display:block;color:#667085;font-size:26rpx;line-height:1.7;margin-top:12rpx}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18rpx}.tile{min-height:178rpx;border-radius:24rpx;background:#fff;padding:26rpx;box-shadow:0 16rpx 42rpx rgba(15,23,42,.07);border:1rpx solid #eef2f7}.tile.primary{background:linear-gradient(135deg,#4f46e5,#06b6d4);color:#fff}.tile-title{display:block;font-size:30rpx;font-weight:900;color:inherit}.tile-desc{display:block;font-size:22rpx;line-height:1.5;margin-top:12rpx;color:inherit;opacity:.76}
+.search-row{display:flex;gap:12rpx;margin-bottom:18rpx}.search-row .input{flex:1}.user,.comment{padding:18rpx 0;border-bottom:1rpx solid #eef2f7}.user-name,.comment-title{display:block;font-size:28rpx;color:#111827;font-weight:900;margin-bottom:8rpx}.row-actions{display:flex;gap:12rpx;margin-top:12rpx}.row-actions .btn{flex:1}
 </style>
