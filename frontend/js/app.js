@@ -234,6 +234,14 @@ async function openReader(id, startPage=1){
   $('readerModal').classList.remove('hidden');
 }
 function closeReader(){ $('readerModal').classList.add('hidden'); }
+function openReaderFromUrl(){
+  const params = new URLSearchParams(location.search);
+  const readerId = Number(params.get('reader') || 0);
+  if(!readerId) return;
+  const startPage = Math.max(1, Number(params.get('page')) || 1);
+  history.replaceState(null, '', location.pathname + location.hash);
+  openReader(readerId, startPage).catch(e => toast(e.message || '阅读器打开失败'));
+}
 async function saveProgress(id, percent){
   if(!token) return toast('请先登录');
   const minutes = readerStartAt && readerBookId === id ? Math.max(0, Math.round((Date.now() - readerStartAt) / 60000)) : 0;
@@ -1153,4 +1161,4 @@ $('logoutBtn').onclick=()=>{ logout(); };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 renderChatMessages();
-updateUserBadge(); updateSearchbarForView('home'); loadAll();
+updateUserBadge(); updateSearchbarForView('home'); loadAll().then(openReaderFromUrl);

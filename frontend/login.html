@@ -210,7 +210,9 @@
 
   <script>
     const API_BASE = '/api/v1';
-    let mode = new URLSearchParams(location.search).get('mode') || 'login';
+    const loginParams = new URLSearchParams(location.search);
+    let mode = loginParams.get('mode') || 'login';
+    const nextUrl = loginParams.get('next');
     if (!['login', 'register'].includes(mode)) mode = 'login';
 
     const $ = (id) => document.getElementById(id);
@@ -247,7 +249,7 @@
     function saveLogin(data) {
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      location.href = '/';
+      location.replace(nextUrl && nextUrl.startsWith('/') ? nextUrl : '/');
     }
 
     async function doLogin(account, password) {
