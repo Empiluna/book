@@ -155,7 +155,6 @@
       <div class="login-header">
         <div class="logo">KG</div>
         <h1>用户入口</h1>
-        <p id="pageSubtitle">登录后进入荐书系统；新用户可直接注册普通账号。</p>
       </div>
 
       <div class="mode-tabs">
@@ -163,7 +162,6 @@
         <button type="button" class="tab-btn" data-mode="register">注册</button>
       </div>
 
-      <div id="roleNote" class="role-note">管理员账号请从独立后台入口登录，普通前端不提供管理员注册。</div>
       <div id="msgBox" class="message"></div>
 
       <form id="loginForm" autocomplete="on">
@@ -206,9 +204,6 @@
         <button type="submit" class="submit-btn" id="registerBtn">注册用户账号</button>
       </form>
 
-      <div class="demo-hint">
-        用户演示账号：<code>demo</code> / <code>demo123</code>
-      </div>
     </div>
     <a href="/" class="back-link">返回首页</a>
   </div>
@@ -235,9 +230,7 @@
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
       loginForm.classList.toggle('hidden', mode !== 'login');
       registerForm.classList.toggle('hidden', mode !== 'register');
-      $('pageSubtitle').textContent = mode === 'login'
-        ? '登录后进入荐书系统；管理员请从独立后台入口登录。'
-        : '注册普通用户账号，使用书架、画像、推荐和书评功能。';
+      $('pageSubtitle').textContent = '';
     }
 
     async function request(path, payload) {
