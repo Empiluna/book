@@ -403,6 +403,9 @@
     let suppressAutoSave = true;
 
     const $ = id => document.getElementById(id);
+    function escapeHtml(value){
+      return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
 
     function headers(){
       return token ? {'Authorization':'Bearer '+token, 'Content-Type':'application/json'} : {'Content-Type':'application/json'};
@@ -649,11 +652,16 @@
       mode='epub'; page=1; pageTotal=0; pageTotalKnown = false; epubPercent = 0; epubScrollEl = null; rendition = null; epubBook = null;
       applyReaderFontScale(epubFont);
       $('stage').innerHTML = '<div id="epub" class="epubbox"><div class="hint">EPUB 正在加载...</div></div>';
-      const res = await fetch(absUrl(url));
-      if(!res.ok) throw new Error('EPUB 读取失败：'+res.status);
-      await renderEpubHtml(await res.arrayBuffer());
-      updateUi();
-      await jumpToInitialPage();
+      try{
+        if(typeof JSZip === 'undefined') throw new Error('EPUB 解析组件未加载，请刷新页面重试');
+        const res = await fetch(absUrl(url));
+        if(!res.ok) throw new Error('EPUB 读取失败：'+res.status);
+        await renderEpubHtml(await res.arrayBuffer());
+        updateUi();
+        await jumpToInitialPage();
+      }catch(e){
+        $('stage').innerHTML = '<div class="hint">EPUB 加载失败：'+escapeHtml(e.message || '未知错误')+'<br><small>'+escapeHtml(url)+'</small></div>';
+      }
     }
 
     function dirname(path){
@@ -709,6 +717,8 @@
     async function renderEpubHtml(buffer){
       const zip = await JSZip.loadAsync(buffer);
       const parser = new DOMParser();
+      const epubEl = document.getElementById('epub');
+      epubEl.innerHTML = '<div class="hint">EPUB 正在解析目录...</div>';
       const containerText = await zip.file('META-INF/container.xml').async('text');
       const containerDoc = parser.parseFromString(containerText, 'application/xml');
       const rootPath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
@@ -727,6 +737,7 @@
         .map(href => normalizePath(base + href));
 
       const chapters = [];
+      epubEl.innerHTML = '<div class="hint">EPUB 正在加载章节 0 / '+spine.length+'</div>';
       for(const chapterPath of spine){
         const file = zip.file(chapterPath);
         if(!file) continue;
@@ -779,11 +790,19 @@
         }
         const body = doc.body || doc.documentElement;
         const html = body?.innerHTML?.trim();
-        if(html) chapters.push(`<article class="epub-chapter">${html}</article>`);
+        if(html){
+          const article = `<article class="epub-chapter">${html}</article>`;
+          chapters.push(article);
+          if(chapters.length === 1) epubEl.innerHTML = '';
+          epubEl.insertAdjacentHTML('beforeend', article);
+          if(chapters.length === 1 || chapters.length % 3 === 0){
+            updateUi();
+            await wait(0);
+          }
+        }
       }
 
-      const epubEl = document.getElementById('epub');
-      epubEl.innerHTML = chapters.join('') || '<div class="hint">EPUB 暂无可显示内容</div>';
+      if(!chapters.length) epubEl.innerHTML = '<div class="hint">EPUB 暂无可显示内容</div>';
       epubScrollEl = epubEl;
       pageTotalKnown = false;
       setTimeout(() => {

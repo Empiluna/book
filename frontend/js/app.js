@@ -8,6 +8,9 @@ let readerStartAt = null;
 let readerBookId = null;
 let graphBookOptions = [];
 let graphBookOptionsLoaded = false;
+let currentView = 'home';
+let currentAppState = {view:'home'};
+let applyingHistoryState = false;
 
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
 async function api(path, opts={}){
@@ -56,6 +59,26 @@ function refreshShelfButtons(bookId){
     btn.classList.toggle('active', active);
     btn.textContent = active ? `取消${shelf}` : `加入${shelf}`;
   });
+}
+function stateUrl(state){
+  if(state?.reader) return `#reader-${state.reader}`;
+  if(state?.detail) return `#book-${state.detail}`;
+  if(state?.view && state.view !== 'home') return `#${state.view}`;
+  return location.pathname || '/';
+}
+function pushAppState(state, replace=false){
+  currentAppState = {...state};
+  const method = replace ? 'replaceState' : 'pushState';
+  history[method](currentAppState, '', stateUrl(currentAppState));
+}
+function hideReaderModal(){
+  $('readerModal')?.classList.add('hidden');
+  if($('readerContent')) $('readerContent').innerHTML = '';
+  readerStartAt = null;
+  readerBookId = null;
+}
+function hideDetailModal(){
+  $('detailModal')?.classList.add('hidden');
 }
 async function loadShelfState(){
   shelfState = {};
@@ -213,7 +236,8 @@ function reviewsHtml(bookId, comments){
   const list = items.length ? items.map(c=>reviewCardHtml(c, bookId)).join('') : '<div class="empty-review">还没有书评，来写第一条吧。</div>';
   return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating"><option value="5">5 星</option><option value="4">4 星</option><option value="3">3 星</option><option value="2">2 星</option><option value="1">1 星</option></select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
 }
-async function openDetail(id){
+async function openDetail(id, opts={}){
+  const push = opts.push !== false;
   const b = await api(`/books/${id}`); activeBook=b;
   await loadShelfState();
   recordFeedback(id, 'click', 'detail');
@@ -222,9 +246,14 @@ async function openDetail(id){
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
   $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
   $('detailModal').classList.remove('hidden');
+  if(push) pushAppState({view:currentView, detail:id});
 }
-function closeDetail(){ $('detailModal').classList.add('hidden'); }
-async function openReader(id, startPage=1){
+function closeDetail(){
+  if(currentAppState?.detail && !currentAppState?.reader) history.back();
+  else hideDetailModal();
+}
+async function openReader(id, startPage=1, opts={}){
+  const push = opts.push !== false;
   const data = await api(`/ecosystem/trial/${id}`);
   readerStartAt = Date.now(); readerBookId = id;
   recordReadingAction(id, 'reading', 'reader');
@@ -232,15 +261,23 @@ async function openReader(id, startPage=1){
   readerUrl += (readerUrl.includes('?') ? '&' : '?') + `page=${encodeURIComponent(startPage || 1)}`;
   $('readerContent').innerHTML = `<iframe src="${readerUrl}" class="reader-frame" title="${data.book.title} 在线试读"></iframe>`;
   $('readerModal').classList.remove('hidden');
+  if(push) pushAppState({view:currentView, detail:activeBook?.id, reader:id, page:startPage || 1});
 }
-function closeReader(){ $('readerModal').classList.add('hidden'); }
-function openReaderFromUrl(){
-  const params = new URLSearchParams(location.search);
+function closeReader(){
+  if(currentAppState?.reader) history.back();
+  else hideReaderModal();
+}
+async function openReaderFromUrl(params=new URLSearchParams(location.search)){
   const readerId = Number(params.get('reader') || 0);
   if(!readerId) return;
   const startPage = Math.max(1, Number(params.get('page')) || 1);
-  history.replaceState(null, '', location.pathname + location.hash);
-  openReader(readerId, startPage).catch(e => toast(e.message || '阅读器打开失败'));
+  pushAppState({view:'home'}, true);
+  try{
+    await openDetail(readerId, {push:true});
+    await openReader(readerId, startPage, {push:true});
+  }catch(e){
+    toast(e.message || '阅读器打开失败');
+  }
 }
 async function saveProgress(id, percent){
   if(!token) return toast('请先登录');
@@ -1130,11 +1167,13 @@ function openAssistantLegacy(){
 function updateSearchbarForView(view){ if($('topSearchbar')) $('topSearchbar').style.display = ['home','discover'].includes(view) ? 'flex' : 'none'; }
 async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile()]); }
 
-function activateView(view){
+function activateView(view, opts={}){
+  const push = opts.push !== false;
   if(view === 'admin' && !isAdmin()){
     toast('请使用管理员账号登录');
     view = 'home';
   }
+  currentView = view;
   const btn = document.querySelector(`[data-view="${view}"]`);
   document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));
   btn?.classList.add('active');
@@ -1146,6 +1185,28 @@ function activateView(view){
   if(view==='shelf') loadShelves();
   if(view==='profile') loadProfile();
   if(view==='admin') loadAdmin();
+  if(push) pushAppState({view});
+}
+
+async function applyAppState(state){
+  applyingHistoryState = true;
+  const next = state || {view:'home'};
+  currentAppState = {...next};
+  hideReaderModal();
+  if(next.view) activateView(next.view, {push:false});
+  if(next.detail){
+    try{
+      if(!activeBook || activeBook.id !== next.detail) await openDetail(next.detail, {push:false});
+      else $('detailModal').classList.remove('hidden');
+    }catch(e){ toast(e.message || '详情打开失败'); }
+  }else{
+    hideDetailModal();
+  }
+  if(next.reader){
+    try{ await openReader(next.reader, next.page || 1, {push:false}); }
+    catch(e){ toast(e.message || '阅读器打开失败'); }
+  }
+  applyingHistoryState = false;
 }
 
 document.querySelectorAll('.nav[data-view]').forEach(btn=>{
@@ -1161,4 +1222,9 @@ $('logoutBtn').onclick=()=>{ logout(); };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 renderChatMessages();
-updateUserBadge(); updateSearchbarForView('home'); loadAll().then(openReaderFromUrl);
+window.addEventListener('popstate', e => {
+  applyAppState(e.state || {view:'home'});
+});
+const initialParams = new URLSearchParams(location.search);
+pushAppState({view:'home'}, true);
+updateUserBadge(); updateSearchbarForView('home'); loadAll(); openReaderFromUrl(initialParams);

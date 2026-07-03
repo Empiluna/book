@@ -42,7 +42,7 @@ def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dic
         "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
         "pdf_url": book.ebook_pdf_url,
         "epub_url": book.ebook_epub_url,
-        "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=raf-2&t={book.id}",
+        "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=raf-3&t={book.id}",
         "total_preview_pages": len(chunks),
         "pages": [{"page": i + 1, "content": c} for i, c in enumerate(chunks)],
         "reader_features": [
