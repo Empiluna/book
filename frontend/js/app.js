@@ -19,17 +19,20 @@ function $(id){ return document.getElementById(id); }
 function setTitle(t){ $('pageTitle').textContent = t; }
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),2600); }
 function isAdmin(){ return !!(currentUser && currentUser.is_admin); }
+function isLoggedIn(){ return !!(token && currentUser); }
 function updateAdminVisibility(){
   const adminNav = document.querySelector('[data-view="admin"]');
   if(adminNav) adminNav.classList.toggle('hidden', !isAdmin());
   if(!isAdmin() && $('admin')?.classList.contains('active')) activateView('home');
 }
 function updateUserBadge(){
-  const loggedIn = !!currentUser;
-  $('userBadge').textContent = loggedIn ? `${currentUser.nickname || currentUser.username}${currentUser.is_admin ? ' · 管理员' : ''}` : '未登录';
-  $('loginBtn').classList.toggle('hidden', loggedIn);
-  $('adminBtn').classList.toggle('hidden', loggedIn);
-  $('logoutBtn').classList.toggle('hidden', !loggedIn);
+  const loggedIn = isLoggedIn();
+  if($('userBadge')){
+    $('userBadge').textContent = loggedIn ? `${currentUser.nickname || currentUser.username}${currentUser.is_admin ? ' · 管理员' : ''}` : '未登录';
+  }
+  if($('loginBtn')) $('loginBtn').classList.toggle('hidden', loggedIn);
+  if($('adminBtn')) $('adminBtn').classList.toggle('hidden', loggedIn);
+  if($('logoutBtn')) $('logoutBtn').classList.toggle('hidden', !loggedIn);
   updateAdminVisibility();
 }
 function logout(){
@@ -221,12 +224,13 @@ async function openDetail(id){
   $('detailModal').classList.remove('hidden');
 }
 function closeDetail(){ $('detailModal').classList.add('hidden'); }
-async function openReader(id){
+async function openReader(id, startPage=1){
   const data = await api(`/ecosystem/trial/${id}`);
   readerStartAt = Date.now(); readerBookId = id;
   recordReadingAction(id, 'reading', 'reader');
-  recordFeedback(id, 'trial', 'reader');
-  $('readerContent').innerHTML = `<iframe src="${data.reader_url}" class="reader-frame" title="${data.book.title} 在线试读"></iframe>`;
+  let readerUrl = data.reader_url;
+  readerUrl += (readerUrl.includes('?') ? '&' : '?') + `page=${encodeURIComponent(startPage || 1)}`;
+  $('readerContent').innerHTML = `<iframe src="${readerUrl}" class="reader-frame" title="${data.book.title} 在线试读"></iframe>`;
   $('readerModal').classList.remove('hidden');
 }
 function closeReader(){ $('readerModal').classList.add('hidden'); }
@@ -564,11 +568,50 @@ async function loadShelves(){
   const data=await api('/ecosystem/shelves');
   $('shelfGrid').innerHTML=data.shelves.map(s=>`<div class="shelf"><h4>${s.name} <span class="tag">${s.count}</span></h4><div class="mini-list">${s.books.slice(0,6).map(x=>miniItem(x.book)).join('')||'<span class="meta">暂无图书</span>'}</div></div>`).join('');
 }
+function progressText(value){
+  const n = Number(value || 0);
+  if(n >= 100) return '100%';
+  if(n <= 0) return '0%';
+  return `${Math.round(n)}%`;
+}
+function formatReadAt(value){
+  if(!value) return '';
+  const raw = String(value);
+  const withZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : raw + 'Z';
+  const d = new Date(withZone);
+  if(Number.isNaN(d.getTime())){
+    return raw;
+  }
+  return d.toLocaleString('zh-CN', {
+    timeZone:'Asia/Shanghai',
+    hour12:false,
+    year:'numeric',
+    month:'2-digit',
+    day:'2-digit',
+    hour:'2-digit',
+    minute:'2-digit',
+    second:'2-digit'
+  });
+}
+function progressBarHtml(value){
+  const n = Math.max(0, Math.min(100, Number(value || 0)));
+  return `<span class="history-progress"><i style="width:${n}%"></i></span>`;
+}
+async function continueReading(bookId, currentPage=1){
+  openReader(bookId, currentPage || 1);
+}
 async function loadHistory(){
-  if(!token){ if($('historyList')) $('historyList').innerHTML='<span class="meta">请先登录查看阅读历史。</span>'; return; }
+  if(!token){
+    if($('historyList')) $('historyList').innerHTML='<span class="meta">请先登录查看阅读历史。</span>';
+    return;
+  }
   const data = await api('/user/history').catch(()=>({items:[]}));
   const statusText = {want_to_read:'想读', reading:'在读', read:'已读'};
-  $('historyList').innerHTML = (data.items||[]).slice(0,12).map(h=>`<div class="mini-item" onclick="openDetail(${h.book.id})"><div><b>${h.book.title}</b><br><span>${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · ${new Date(h.read_at).toLocaleString()}</span></div><button onclick="event.stopPropagation();openReader(${h.book.id})">继续阅读</button></div>`).join('') || '<span class="meta">暂无阅读历史。</span>';
+  $('historyList').innerHTML = (data.items||[]).slice(0,12).map(h=>{
+    const percent = Number(h.progress_percent || 0);
+    const page = Number(h.current_page || 1);
+    return `<div class="mini-item history-item" onclick="openDetail(${h.book.id})"><div class="history-main"><b>${h.book.title}</b><br><span>${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · 已读 ${progressText(percent)} · 第 ${page} 页 · ${formatReadAt(h.read_at)}</span>${progressBarHtml(percent)}</div><button onclick="event.stopPropagation();continueReading(${h.book.id}, ${page})">继续阅读</button></div>`;
+  }).join('') || '<span class="meta">暂无阅读历史。</span>';
 }
 async function loadProfile(){
   if(!token){
@@ -1056,6 +1099,17 @@ async function sendChatMessage(){
 function sendChat(){
   return sendChatMessage();
 }
+window.addEventListener('message', event => {
+  const data = event.data || {};
+  if(data.type === 'reader-progress-saved'){
+    Promise.allSettled([
+      loadHistory(),
+      loadShelves(),
+      loadProfile(),
+      loadShelfState()
+    ]);
+  }
+});
 function openAssistantLegacy(){
   const modal = $('assistantModal');
   if(modal){

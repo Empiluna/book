@@ -39,7 +39,7 @@
         <button onclick="zoomIn()">放大</button>
         <button class="ghost" onclick="fitWidth()">适宽</button>
         <button class="ghost" onclick="toggleNight()">夜间</button>
-        <button class="ghost" onclick="saveProgress()">保存进度</button>
+        <button class="ghost" onclick="markRead()">标记已读</button>
       </div>
     </header>
     <main id="stage" class="stage" tabindex="-1"><div class="hint">加载阅读器中...</div></main>
@@ -52,12 +52,22 @@
     const params = new URLSearchParams(location.search);
     const bookId = params.get('book_id') || '1';
     const recordFlag = params.get('record');
+    const startPage = Math.max(1, Number(params.get('page')) || 1);
     const token = localStorage.getItem('token') || '';
 
     let trial = null, mode = 'text', page = 1, pageTotal = 1;
     let pdfDoc = null, pdfUrl = null, scale = 3, fitMode = false, dpr = 1;
     let rendition = null, epubBook = null, epubFont = 100;
     let pageTimer = null, renderTimer = null, lastScrollTop = -1, rafId = null;
+    let autoSaveTimer = null;
+    let lastSavedPage = 0;
+    let lastSavedProgress = 0;
+    let lastSavedAt = 0;
+    let readerEnterAt = Date.now();
+    let readerReady = false;
+    let suppressAutoSave = true;
+    let pdfPageWidth = 0;
+    let pdfPageHeight = 300;
 
     const $ = id => document.getElementById(id);
 
@@ -71,7 +81,10 @@
     }
     function absUrl(url){ return new URL(url, location.origin).href; }
     function allowed(){ return Math.max(1, trial?.allowed_pages || 99999); }
-    function progress(){ return pageTotal>0 ? Math.min(100, Math.max(1, Math.round(page/pageTotal*100))) : 0; }
+    function progress(){
+      if(pageTotal <= 0) return 0;
+      return Math.min(100, Math.max(0, Math.round((page / pageTotal) * 1000) / 10));
+    }
 
     function updateUi(){
       $('pageInput').value = page;
@@ -85,8 +98,7 @@
 
     // ── Helper: get element top relative to stage scroll container ──
     function topInStage(el){
-      const stage = $('stage');
-      return el.offsetTop - stage.offsetTop;
+      return el.offsetTop;
     }
 
     // ── Detect which page is currently visible ──
@@ -102,7 +114,7 @@
           const dist = Math.abs(topInStage(el) - target);
           if(dist < bestDist){ bestDist = dist; best = i+1; }
         });
-        if(best !== page){ page = best; updateUi(); }
+        if(best !== page){ page = best; updateUi(); scheduleAutoSave(); }
       }else if(mode==='pdf'){
         const pages = stage.querySelectorAll('.pdf-page');
         if(!pages.length) return;
@@ -111,7 +123,7 @@
           const dist = Math.abs(topInStage(el) - target);
           if(dist < bestDist){ bestDist = dist; best = i+1; }
         });
-        if(best !== page){ page = best; updateUi(); }
+        if(best !== page){ page = best; updateUi(); scheduleAutoSave(); }
       }
     }
 
@@ -184,11 +196,14 @@
       $('stage').focus({preventScroll:true});
       detectCurrentPage();
       startRafMonitor();
+      jumpToInitialPage();
     }
 
     // ── PDF: render pages lazily ──
     async function loadPdf(url){
-      pdfUrl = absUrl(url); mode='pdf'; page=1;
+      pdfUrl = absUrl(url);
+      mode = 'pdf';
+      page = 1;
       $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages"><div class="hint">PDF 加载中...</div></div>';
       try {
         const pdfjsLib = await import('/static/vendor/pdf.min.mjs?v=4.10.38');
@@ -197,32 +212,37 @@
         pageTotal = Math.min(pdfDoc.numPages, allowed());
         dpr = Math.min(window.devicePixelRatio||1, 2);
 
+        const fp = await pdfDoc.getPage(1);
+        const host = $('stage');
+        const avail = Math.max(320, host.clientWidth-48);
+
         if(fitMode){
-          const fp = await pdfDoc.getPage(1);
-          const host = $('stage');
-          const avail = Math.max(320, host.clientWidth-48);
           scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
         }
 
-        // Create placeholders for all pages
+        const firstViewport = fp.getViewport({scale});
+        const dw = fitMode ? Math.min(1120, avail) : firstViewport.width;
+        const dh = firstViewport.height * (dw / firstViewport.width);
+        pdfPageWidth = Math.floor(dw);
+        pdfPageHeight = Math.floor(dh);
+
         let html = '';
         for(let i=1; i<=pageTotal; i++){
-          html += '<div class="pdf-page pdf-placeholder" data-page="'+i+'">第 '+i+' 页</div>';
+          html += `<div class="pdf-page pdf-placeholder" data-page="${i}" style="width:${pdfPageWidth}px;min-height:${pdfPageHeight}px">第 ${i} 页</div>`;
         }
         $('stage').innerHTML = '<div id="pdfPages" class="pdf-pages">'+html+'</div>';
-        updateUi();
 
-        // Register scroll listener for lazy PDF page rendering
         if(!$('stage')._hasScrollListener){
           $('stage')._hasScrollListener = true;
           $('stage').addEventListener('scroll', onUserScroll, {passive:true});
         }
 
-        // Render first pages immediately
+        updateUi();
+        await renderPdfPageByNumber(1);
         await renderNearbyPdfPages();
         $('stage').focus({preventScroll:true});
-        detectCurrentPage();
         startRafMonitor();
+        await jumpToInitialPage();
       } catch(e) {
         $('stage').innerHTML = '<div class="hint">PDF 加载失败：'+e.message+'<br><small>'+pdfUrl+'</small></div>';
       }
@@ -238,6 +258,9 @@
         const dw = fitMode ? Math.min(1120, avail) : viewport.width;
         const dh = viewport.height * (dw/viewport.width);
 
+        el.style.width = Math.floor(dw)+'px';
+        el.style.minHeight = Math.floor(dh)+'px';
+
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(viewport.width*dpr);
         canvas.height = Math.floor(viewport.height*dpr);
@@ -252,6 +275,29 @@
         el.appendChild(canvas);
         return true;
       } catch(e) { el.textContent = '渲染失败'; return false; }
+    }
+
+    function wait(ms){
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function renderPdfPageByNumber(p){
+      if(!pdfDoc) return;
+      const pageNo = Math.min(pageTotal, Math.max(1, Number(p) || 1));
+      const el = document.querySelector(`.pdf-page[data-page="${pageNo}"]`);
+      if(el && el.classList.contains('pdf-placeholder')){
+        await renderOnePdfPage(el);
+      }
+    }
+
+    async function renderPdfRangeAround(p){
+      if(!pdfDoc) return;
+      const pageNo = Math.min(pageTotal, Math.max(1, Number(p) || 1));
+      const tasks = [];
+      for(let i=Math.max(1, pageNo-1); i<=Math.min(pageTotal, pageNo+1); i++){
+        tasks.push(renderPdfPageByNumber(i));
+      }
+      await Promise.all(tasks);
     }
 
     async function renderNearbyPdfPages(){
@@ -284,8 +330,21 @@
     async function quickReloadPdf(){
       if(!pdfDoc) return;
       const stage = $('stage');
+      const fp = await pdfDoc.getPage(1);
+      const avail = Math.max(320, stage.clientWidth-48);
+      const viewport = fp.getViewport({scale});
+      const dw = fitMode ? Math.min(1120, avail) : viewport.width;
+      const dh = viewport.height * (dw/viewport.width);
+      pdfPageWidth = Math.floor(dw);
+      pdfPageHeight = Math.floor(dh);
       const all = stage.querySelectorAll('.pdf-page');
-      all.forEach(el => { el.innerHTML = ''; el.classList.add('pdf-placeholder'); el.textContent = '第 '+el.dataset.page+' 页'; });
+      all.forEach(el => {
+        el.innerHTML = '';
+        el.classList.add('pdf-placeholder');
+        el.style.width = pdfPageWidth+'px';
+        el.style.minHeight = pdfPageHeight+'px';
+        el.textContent = '第 '+el.dataset.page+' 页';
+      });
       updateUi();
       await renderNearbyPdfPages();
     }
@@ -307,6 +366,7 @@
         pageTotal = Math.min(total, allowed());
         page = Math.min(pageTotal, (loc.start.index||0)+1);
         updateUi();
+        scheduleAutoSave();
       });
 
       // EPUB scroll tracking
@@ -317,11 +377,12 @@
           pageTimer = setTimeout(() => {
             const ratio = (epubEl.scrollTop+epubEl.clientHeight)/epubEl.scrollHeight;
             const est = Math.max(1, Math.min(pageTotal, Math.ceil(ratio*pageTotal)));
-            if(est !== page){ page = est; updateUi(); }
+            if(est !== page){ page = est; updateUi(); scheduleAutoSave(); }
           }, 300);
         }, {passive:true});
       }
       updateUi();
+      await jumpToInitialPage();
     }
 
     // ── Navigation (manual scrollTop to avoid parent scroll propagation) ──
@@ -341,12 +402,45 @@
       }
     }
 
+    async function jumpToInitialPage(){
+      suppressAutoSave = true;
+      readerReady = false;
+
+      const targetPage = Math.min(pageTotal, Math.max(1, startPage || 1));
+      page = targetPage;
+
+      await wait(350);
+
+      if(mode === 'pdf'){
+        await renderPdfRangeAround(targetPage);
+        scrollToPage(targetPage);
+        await wait(250);
+        await renderNearbyPdfPages();
+      }else if(mode === 'epub' && rendition){
+        await rendition.display(targetPage - 1);
+      }else{
+        scrollToPage(targetPage);
+      }
+
+      page = targetPage;
+      updateUi();
+
+      await wait(500);
+
+      lastSavedPage = page;
+      lastSavedProgress = progress();
+      lastSavedAt = Date.now();
+      readerReady = true;
+      suppressAutoSave = false;
+    }
+
     function goPage(){
       const next = Math.min(pageTotal, Math.max(1, Number($('pageInput').value)||1));
       page = next;
       if(mode==='epub' && rendition){ rendition.display(next-1); }
       else { scrollToPage(next); }
       updateUi();
+      scheduleAutoSave();
     }
 
     function nextPage(){
@@ -355,6 +449,7 @@
       if(mode==='epub' && rendition){ rendition.next(); }
       else { scrollToPage(page); }
       updateUi();
+      scheduleAutoSave();
     }
 
     function prevPage(){
@@ -363,6 +458,7 @@
       if(mode==='epub' && rendition){ rendition.prev(); }
       else { scrollToPage(page); }
       updateUi();
+      scheduleAutoSave();
     }
 
     // ── Zoom ──
@@ -400,11 +496,77 @@
 
     function toggleNight(){ document.body.classList.toggle('night'); }
 
-    async function saveProgress(){
-      try {
-        await api('/user/progress/'+bookId, {method:'POST', body:JSON.stringify({current_page:page, progress_percent:progress(), reading_minutes:12, last_device:'Web Reader'})});
-        alert('阅读进度已保存：'+progress()+'%');
-      } catch(e) { alert('请先登录后保存进度'); }
+    function scheduleAutoSave(){
+      if(!token || !readerReady || suppressAutoSave) return;
+      if(autoSaveTimer) clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => {
+        saveProgress(false).catch(()=>{});
+      }, 900);
+    }
+
+    async function saveProgress(showTip=false, force=false, overrideProgress=null){
+      if(!token) return;
+      if(!force && (!readerReady || suppressAutoSave)) return;
+
+      const now = Date.now();
+      const currentProgress = overrideProgress !== null ? overrideProgress : progress();
+
+      if(!force && page <= 1 && lastSavedProgress > 1){
+        return;
+      }
+
+      if(!force && lastSavedProgress > 1 && currentProgress + 0.1 < lastSavedProgress){
+        return;
+      }
+
+      if(
+        !force &&
+        page === lastSavedPage &&
+        Math.round(currentProgress) === Math.round(lastSavedProgress) &&
+        now - lastSavedAt < 25000
+      ){
+        return;
+      }
+
+      const minutes = Math.max(0, Math.round((now - readerEnterAt) / 60000));
+
+      await api('/user/progress/'+bookId, {
+        method:'POST',
+        body:JSON.stringify({
+          current_page:page,
+          progress_percent:currentProgress,
+          reading_minutes:minutes,
+          last_device:'Web Reader'
+        })
+      });
+
+      lastSavedPage = page;
+      lastSavedProgress = currentProgress;
+      lastSavedAt = now;
+      readerEnterAt = now;
+
+      window.parent?.postMessage({
+        type:'reader-progress-saved',
+        book_id:Number(bookId),
+        current_page:page,
+        progress_percent:currentProgress
+      }, '*');
+
+      if(showTip){
+        alert('阅读进度已自动保存：'+Math.round(currentProgress)+'%');
+      }
+    }
+
+    async function markRead(){
+      page = pageTotal;
+      if(mode === 'epub' && rendition){
+        rendition.display(pageTotal - 1);
+      }else{
+        scrollToPage(pageTotal);
+      }
+      updateUi();
+      await saveProgress(true, true, 100);
+      alert('已标记为已读');
     }
 
     // Resize handler for PDF
@@ -416,6 +578,12 @@
           scale = Math.min(3.2, Math.max(.8, avail/fp.getViewport({scale:1}).width));
           quickReloadPdf();
         });
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if(readerReady && !suppressAutoSave){
+        saveProgress(false, false).catch(()=>{});
       }
     });
 

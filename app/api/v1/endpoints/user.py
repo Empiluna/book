@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models import ReadingHistory, SearchLog, User
+from app.models import ReadingHistory, ReadingProgress, SearchLog, User
 from app.schemas import (
     BookmarkRequest,
     LoginRequest,
@@ -76,21 +76,47 @@ def history(book_id: int, status: str = Query("read"), source: str | None = None
 
 @router.get("/history")
 def my_history(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    rows = db.query(ReadingHistory).filter_by(user_id=user.id).order_by(ReadingHistory.read_at.desc()).limit(80).all()
+    rows = (
+        db.query(ReadingHistory)
+        .filter_by(user_id=user.id)
+        .order_by(ReadingHistory.read_at.desc())
+        .limit(80)
+        .all()
+    )
+    progresses = db.query(ReadingProgress).filter_by(user_id=user.id).all()
+    progress_map = {p.book_id: p for p in progresses}
+
     items = []
     seen = set()
     for h in rows:
         if h.book_id in seen or not h.book:
             continue
         seen.add(h.book_id)
+        progress = progress_map.get(h.book_id)
+        progress_percent = float(progress.progress_percent or 0) if progress else 0
+        current_page = int(progress.current_page or 1) if progress else 1
+        if h.status == "read" and progress_percent < 100:
+            progress_percent = 100
+        read_time = progress.updated_at if progress and progress.updated_at else h.read_at
         items.append({
             "id": h.id,
             "status": h.status,
             "source": h.source,
-            "read_at": h.read_at.isoformat(),
+            "read_at": read_time.isoformat() + "Z",
+            "progress_percent": round(progress_percent, 1),
+            "current_page": current_page,
             "book": book_card(h.book),
         })
-    events = [{"id": h.id, "book_id": h.book_id, "status": h.status, "source": h.source, "read_at": h.read_at.isoformat()} for h in rows[:30]]
+    events = [
+        {
+            "id": h.id,
+            "book_id": h.book_id,
+            "status": h.status,
+            "source": h.source,
+            "read_at": h.read_at.isoformat() + "Z",
+        }
+        for h in rows[:30]
+    ]
     return {"items": items, "events": events, "total": len(items)}
 
 

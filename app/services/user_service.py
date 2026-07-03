@@ -182,11 +182,33 @@ def update_reading_progress(db: Session, user: User, book_id: int, current_page:
     if not book or book.is_deleted:
         raise HTTPException(404, "图书不存在")
     row = db.query(ReadingProgress).filter_by(user_id=user.id, book_id=book_id).first()
+
+    old_page = int(row.current_page or 1) if row else 1
+    old_progress = float(row.progress_percent or 0) if row else 0
+    incoming_page = max(1, int(current_page or 1))
+    incoming_progress = max(0, min(100, float(progress_percent or 0)))
+
+    if row and old_progress > 1 and incoming_page <= 1 and incoming_progress <= 1:
+        return {
+            "book": book_card(book),
+            "current_page": old_page,
+            "progress_percent": old_progress,
+            "reading_minutes": row.reading_minutes or 0,
+            "status": "read" if old_progress >= 100 else "reading",
+            "session_minutes": 0,
+            "ignored": True,
+            "message": "忽略异常的低进度覆盖",
+        }
+
+    if row and old_progress > 1 and incoming_progress + 0.1 < old_progress:
+        incoming_page = old_page
+        incoming_progress = old_progress
+
     if not row:
         row = ReadingProgress(user_id=user.id, book_id=book_id)
         db.add(row)
-    row.current_page = current_page
-    row.progress_percent = max(0, min(100, progress_percent))
+    row.current_page = incoming_page
+    row.progress_percent = incoming_progress
     row.last_device = last_device
 
     session_minutes = max(int(reading_minutes or 0), 0)
@@ -196,7 +218,7 @@ def update_reading_progress(db: Session, user: User, book_id: int, current_page:
             book_id=book_id,
             minutes=session_minutes,
             progress_percent=row.progress_percent,
-            current_page=current_page,
+            current_page=row.current_page,
             device=last_device,
             ended_at=datetime.utcnow(),
         ))
