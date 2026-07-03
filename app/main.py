@@ -19,6 +19,9 @@ import app.models  # noqa: F401
 settings = get_settings()
 mimetypes.add_type("application/epub+zip", ".epub")
 mimetypes.add_type("application/pdf", ".pdf")
+# Edge/Chrome 动态 import .mjs 时必须收到 JavaScript MIME，否则会报 Failed to fetch dynamically imported module。
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/javascript", ".js")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -72,17 +75,31 @@ def index():
 @app.get("/login")
 def login_page():
     login_file = FRONTEND / "login.html"
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+
     if login_file.exists():
-        return FileResponse(str(login_file))
-    return FileResponse(str(FRONTEND / "index.html"))
+        return FileResponse(str(login_file), headers=headers)
+
+    return FileResponse(str(FRONTEND / "index.html"), headers=headers)
 
 
 @app.get("/admin")
-def admin_index():
+def admin_page():
     admin_file = FRONTEND / "admin.html"
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+
     if admin_file.exists():
-        return FileResponse(str(admin_file))
-    return {"message": settings.PROJECT_NAME, "docs": "/docs"}
+        return FileResponse(str(admin_file), headers=headers)
+
+    return FileResponse(str(FRONTEND / "index.html"), headers=headers)
 
 
 @app.get("/health")
