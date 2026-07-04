@@ -191,3 +191,22 @@ class SystemConfigUpdate(BaseModel):
     key: str
     value: str
     description: str | None = None
+
+
+class AdminBatchIdsRequest(BaseModel):
+    ids: list[int] = Field(min_length=1)
+
+
+class AdminBatchUserStatusRequest(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    is_active: bool
+
+
+class AdminBatchUserRoleRequest(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    is_admin: bool
+
+
+class AdminBatchCommentPinRequest(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    is_pinned: bool
