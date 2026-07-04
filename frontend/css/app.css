@@ -1165,84 +1165,112 @@
   background:linear-gradient(90deg,#7c3aed,#0ea5e9);
 }
 
-.modal-card{
-  scrollbar-width:none;
-  -ms-overflow-style:none;
-}
 
-.modal-card::-webkit-scrollbar{
-  width:0;
-  height:0;
-}
+/* 未登录书架预览优化 */
+.guest-shelf-grid{display:block}.guest-shelf-hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);gap:18px;align-items:stretch;margin-bottom:18px;padding:24px;border-radius:26px;background:linear-gradient(135deg,rgba(255,255,255,.76),rgba(239,246,255,.78));border:1px solid rgba(148,163,184,.2);box-shadow:0 18px 48px rgba(15,23,42,.08)}.guest-shelf-copy h3{margin:12px 0 10px;font-size:28px;letter-spacing:-.04em}.guest-shelf-copy p{max-width:780px;margin:0;color:#475467;line-height:1.8}.guest-shelf-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.guest-shelf-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.guest-shelf-stats .stat{min-height:104px;display:flex;flex-direction:column;justify-content:center;background:rgba(255,255,255,.68)}.guest-shelf-stats .stat b{font-size:24px;color:#6d28d9}.guest-loading{padding:18px 20px;border-radius:20px;background:rgba(255,255,255,.62);color:#667085;border:1px solid rgba(148,163,184,.2)}.guest-shelf-section{margin-top:20px}.guest-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.guest-section-head h4{margin:0;font-size:22px}.guest-section-head p{margin:6px 0 0;color:#667085;line-height:1.6}.guest-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}.guest-book-card{display:grid;grid-template-columns:92px 1fr;gap:14px;min-height:176px;padding:14px;border-radius:24px;background:rgba(255,255,255,.72);border:1px solid rgba(17,24,39,.08);box-shadow:0 12px 34px rgba(15,23,42,.07);cursor:pointer;transition:.18s}.guest-book-card:hover{transform:translateY(-3px);box-shadow:0 20px 52px rgba(15,23,42,.12)}.guest-cover-wrap{position:relative}.guest-cover{width:92px;height:136px;object-fit:cover;border-radius:17px;background:linear-gradient(135deg,#1e293b,#7c3aed);box-shadow:0 15px 30px rgba(15,23,42,.18)}.guest-cover-wrap span{position:absolute;left:7px;right:7px;bottom:7px;text-align:center;padding:4px 6px;border-radius:999px;background:rgba(255,255,255,.9);color:#5b21b6;font-size:11px;font-weight:900}.guest-book-body{min-width:0}.guest-book-body h4{margin:0;font-size:17px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.guest-meta{margin:6px 0;color:#667085;font-size:12px}.guest-reason{margin:9px 0 0;color:#344054;line-height:1.55;font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.guest-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.guest-card-actions button{padding:7px 10px;border-radius:999px;font-size:12px}.guest-card-actions .ghost{background:rgba(248,250,252,.88)}@media(max-width:900px){.guest-shelf-hero{grid-template-columns:1fr}.guest-shelf-stats{grid-template-columns:1fr}.guest-book-grid{grid-template-columns:1fr}.guest-section-head{align-items:flex-start;flex-direction:column}}
 
-.book-card{
-  align-items:start;
-  min-height:172px;
-}
 
-.book-info{
-  display:grid;
-  grid-template-rows:auto auto minmax(26px,1fr) auto auto;
-  height:100%;
-  align-content:start;
+/* 未登录书架页文字精简与统计卡优化 */
+.guest-shelf-copy p,
+.guest-section-head p,
+.guest-reason{
+  display:none !important;
 }
-
-.book-card-header{
-  grid-template-columns:minmax(0,1fr) auto;
-  min-height:44px;
+.guest-shelf-copy h3{
+  margin-bottom:18px !important;
 }
-
-.book-rating{
-  display:inline-flex;
-  align-items:center;
-  justify-content:flex-end;
-  min-width:42px;
-  padding-top:1px;
-  color:#64748b;
-  font-size:12px;
-  font-weight:900;
-  white-space:nowrap;
-}
-
-.book-meta{
-  min-height:18px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.book-info .tags{
-  min-height:26px;
-  align-content:flex-start;
-}
-
-.book-info .reason{
-  margin:4px 0 0;
-}
-
-.book-card .card-actions{
-  align-self:end;
-  min-height:70px;
-  margin-top:8px;
-  display:flex;
-  flex-direction:column;
+.guest-shelf-stats .stat{
+  min-height:118px;
   align-items:flex-start;
-  justify-content:flex-end;
+  padding:20px 18px;
 }
-
-.tag-cloud{
-  align-items:center;
+.guest-shelf-stats .stat b{
+  font-size:26px !important;
+  line-height:1.1;
 }
-
-.cloud{
-  display:inline-flex;
+.guest-shelf-stats .stat span{
+  margin-top:8px;
+  font-size:16px !important;
+  line-height:1.35;
+  font-weight:900;
+  color:#334155;
+}
+.guest-book-card{
+  min-height:156px;
+}
+.guest-card-actions{
+  margin-top:14px;
+}
+.guest-cover-wrap.no-cover{
+  width:92px;
+  height:136px;
+  border-radius:17px;
+  background:linear-gradient(135deg,#1e293b,#7c3aed);
+  box-shadow:0 15px 30px rgba(15,23,42,.18);
+}
+.guest-cover-wrap.no-cover::after{
+  content:'封面';
+  position:absolute;
+  inset:0;
+  display:flex;
   align-items:center;
   justify-content:center;
-  min-height:40px;
-  padding:9px 14px;
-  border-radius:16px;
-  font-size:15px;
-  line-height:1.15;
-  transform:scale(calc(.96 + var(--weight, .4) * .08));
-  transform-origin:center;
+  color:#fff;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+
+
+/* 未登录书架统计卡片：数字更醒目，说明文字统一变大 */
+.guest-shelf-stats .stat{
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:flex-start !important;
+  justify-content:center !important;
+  gap:10px !important;
+  min-height:132px !important;
+  padding:22px 20px !important;
+}
+.guest-shelf-stats .stat b{
+  font-size:38px !important;
+  line-height:1 !important;
+  font-weight:950 !important;
+  color:#6d28d9 !important;
+  letter-spacing:-.04em !important;
+}
+.guest-shelf-stats .stat span{
+  margin-top:0 !important;
+  font-size:18px !important;
+  line-height:1.25 !important;
+  font-weight:900 !important;
+  color:#17202a !important;
+}
+
+
+/* 未登录书架统计卡片：标签大字在上，数字小字在下 */
+.guest-shelf-stats .stat{
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:center !important;
+  align-items:flex-start !important;
+  gap:10px !important;
+  min-height:132px !important;
+  padding:22px 20px !important;
+}
+.guest-shelf-stats .stat span{
+  order:1 !important;
+  margin:0 !important;
+  font-size:30px !important;
+  line-height:1.05 !important;
+  font-weight:950 !important;
+  color:#6d28d9 !important;
+  letter-spacing:-0.04em !important;
+}
+.guest-shelf-stats .stat b{
+  order:2 !important;
+  font-size:26px !important;
+  line-height:1.2 !important;
+  font-weight:900 !important;
+  color:#17202a !important;
+  letter-spacing:0 !important;
 }
