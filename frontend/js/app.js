@@ -102,7 +102,7 @@ function bookCard(b){
   const id = b.id || b.book_id;
   const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
   const cover = b.cover_thumb_url || b.cover_url || '';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" alt="${attr(b.title)}封面" loading="lazy" decoding="async" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" alt="${attr(b.title)}封面" loading="lazy" decoding="async" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4><span class="book-rating">⭐ ${b.avg_rating||0}</span></div><p class="meta book-meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
 }
 async function recordFeedback(bookId, eventType, source='frontend'){
   if(!bookId) return;
@@ -211,6 +211,12 @@ async function recordReadingAction(bookId, status='reading', source='detail'){
   if(!token) return;
   api(`/user/history/${bookId}?status=${encodeURIComponent(status)}&source=${encodeURIComponent(source)}`, {method:'POST'}).catch(()=>{});
 }
+async function savedReaderPage(bookId){
+  if(!token) return 1;
+  const data = await api('/user/progress').catch(()=>({items:[]}));
+  const row = (data.items || []).find(x => String(x.book?.id || x.book?.book_id) === String(bookId));
+  return Math.max(1, Number(row?.current_page || 1));
+}
 function stars(value){
   const rating = Number(value || 0);
   return Array.from({length:5}, (_, i)=>`<span class="${i < Math.round(rating) ? 'on' : ''}">★</span>`).join('');
@@ -261,16 +267,18 @@ function closeDetail(){
   if(currentAppState?.detail && !currentAppState?.reader) history.back();
   else hideDetailModal();
 }
-async function openReader(id, startPage=1, opts={}){
+async function openReader(id, startPage=null, opts={}){
   const push = opts.push !== false;
   const data = await api(`/ecosystem/trial/${id}`);
+  const explicitPage = Number(startPage || 0);
+  const targetPage = explicitPage > 0 ? Math.max(1, explicitPage) : await savedReaderPage(id);
   readerStartAt = Date.now(); readerBookId = id;
   recordReadingAction(id, 'reading', 'reader');
   let readerUrl = data.reader_url;
-  readerUrl += (readerUrl.includes('?') ? '&' : '?') + `page=${encodeURIComponent(startPage || 1)}`;
+  readerUrl += (readerUrl.includes('?') ? '&' : '?') + `page=${encodeURIComponent(targetPage)}`;
   $('readerContent').innerHTML = `<iframe src="${readerUrl}" class="reader-frame" title="${data.book.title} 在线试读"></iframe>`;
   $('readerModal').classList.remove('hidden');
-  if(push) pushAppState({view:currentView, detail:activeBook?.id, reader:id, page:startPage || 1});
+  if(push) pushAppState({view:currentView, detail:activeBook?.id, reader:id, page:targetPage});
 }
 function closeReader(){
   if(currentAppState?.reader) history.back();
@@ -1188,6 +1196,9 @@ function sendChat(){
 window.addEventListener('message', event => {
   const data = event.data || {};
   if(data.type === 'reader-progress-saved'){
+    if(currentAppState?.reader && Number(currentAppState.reader) === Number(data.book_id)){
+      pushAppState({...currentAppState, page:Number(data.current_page || currentAppState.page || 1)}, true);
+    }
     Promise.allSettled([
       loadHistory(),
       loadShelves(),
