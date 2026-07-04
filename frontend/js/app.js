@@ -248,6 +248,11 @@ async function openDetail(id, opts={}){
   const comments = await api(`/ecosystem/comments/${id}`).catch(()=>({items:[]}));
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
   $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
+  const myCommentId = comments.summary?.my_comment_id;
+  if(myCommentId){
+    const mine = (comments.items || []).find(c => c.id === myCommentId);
+    enterReviewEdit(mine, false);
+  }
   $('detailModal').classList.remove('hidden');
   if(push) pushAppState({view:currentView, detail:id});
 }
@@ -321,6 +326,21 @@ function cancelReviewEdit(){
   resetReviewForm();
   $('reviewContent')?.focus();
 }
+function enterReviewEdit(comment, scroll=false){
+  if(!comment) return;
+  reviewEditingCommentId = comment.id;
+  if($('reviewContent')) $('reviewContent').value = comment.content || '';
+  if($('reviewRating')) $('reviewRating').value = String(Math.max(1, Math.min(5, Math.round(Number(comment.rating || 5)))));
+  if($('reviewComposeTitle')) $('reviewComposeTitle').textContent = '编辑我的书评';
+  if($('reviewComposeHint')) $('reviewComposeHint').textContent = '你已经写过书评，这里会更新原来的评论。';
+  if($('reviewSubmitBtn')) $('reviewSubmitBtn').textContent = '提交修改';
+  if($('reviewCancelBtn')) $('reviewCancelBtn').classList.remove('hidden');
+  if(scroll){
+    const compose = $('reviewCompose');
+    if(compose) compose.scrollIntoView({behavior:'smooth', block:'start'});
+    setTimeout(()=>$('reviewContent')?.focus(), 260);
+  }
+}
 async function submitReview(id){
   if(!token) return toast('请先登录');
   const content = $('reviewContent')?.value.trim();
@@ -347,16 +367,7 @@ async function editComment(commentId, bookId){
   const data = await api(`/ecosystem/comments/${bookId}`).catch(()=>({items:[]}));
   const comment = (data.items || []).find(c => c.id === commentId);
   if(!comment) return toast('没有找到这条书评');
-  reviewEditingCommentId = commentId;
-  if($('reviewContent')) $('reviewContent').value = comment.content || '';
-  if($('reviewRating')) $('reviewRating').value = String(Math.max(1, Math.min(5, Math.round(Number(comment.rating || 5)))));
-  if($('reviewComposeTitle')) $('reviewComposeTitle').textContent = '编辑书评';
-  if($('reviewComposeHint')) $('reviewComposeHint').textContent = '正在编辑你已发布的评论，修改内容或分数后提交。';
-  if($('reviewSubmitBtn')) $('reviewSubmitBtn').textContent = '提交修改';
-  if($('reviewCancelBtn')) $('reviewCancelBtn').classList.remove('hidden');
-  const compose = $('reviewCompose');
-  if(compose) compose.scrollIntoView({behavior:'smooth', block:'start'});
-  setTimeout(()=>$('reviewContent')?.focus(), 260);
+  enterReviewEdit(comment, true);
 }
 async function deleteComment(commentId, bookId){
   if(!token) return toast('请先登录');

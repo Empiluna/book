@@ -104,7 +104,7 @@ def comments(book_id: int, db: Session = Depends(get_db), user: User | None = De
     my_comment_id = None
     if user:
         liked_ids = {x.comment_id for x in db.query(CommentLike).filter(CommentLike.user_id == user.id, CommentLike.comment_id.in_([c.id for c in rows] or [0])).all()}
-        own = next((c for c in rows if c.user_id == user.id), None)
+        own = db.query(BookComment).filter_by(book_id=book_id, user_id=user.id, is_deleted=False).order_by(BookComment.created_at.desc()).first()
         my_comment_id = own.id if own else None
     ratings = [c.rating for c in rows if c.rating]
     distribution = {str(i): 0 for i in range(1, 6)}
@@ -128,6 +128,16 @@ def comments(book_id: int, db: Session = Depends(get_db), user: User | None = De
 def add_comment(book_id: int, data: CommentCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not db.get(Book, book_id):
         raise HTTPException(404, "图书不存在")
+    existing = db.query(BookComment).filter_by(book_id=book_id, user_id=user.id, is_deleted=False).order_by(BookComment.created_at.desc()).first()
+    if existing:
+        existing.content = data.content
+        existing.rating = data.rating
+        db.commit(); db.refresh(existing)
+        if data.rating:
+            from app.services.user_service import rate_book
+            rate_book(db, user, book_id, data.rating)
+        update_book_rating(db, book_id)
+        return {"message": "评论已更新", "comment": comment_card(existing)}
     comment = BookComment(user_id=user.id, book_id=book_id, content=data.content, rating=data.rating)
     db.add(comment)
     db.commit(); db.refresh(comment)
