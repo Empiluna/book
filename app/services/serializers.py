@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.models import Book, BookComment, PurchaseLink, User
+from app.utils.categories import primary_category
 from app.utils.purchase_channels import build_purchase_channels
 
 
@@ -54,7 +55,8 @@ def book_card(book: Book, score: float | None = None, reason: str | None = None,
     links = [purchase_link_card(x) for x in getattr(book, "purchase_links", []) if x.is_active]
     best = min(links, key=lambda x: x["price"] if x.get("price") is not None else 10**9) if links else None
     authors = author_names(book)
-    cover_url = book.cover_url or _cover(book.title, book.category)
+    category = primary_category(book.category)
+    cover_url = book.cover_url or _cover(book.title, category)
     cover_thumb_url = None
     if cover_url and cover_url.startswith("/data/book_read/"):
         name = cover_url.rsplit("/", 1)[-1].rsplit(".", 1)[0]
@@ -70,7 +72,8 @@ def book_card(book: Book, score: float | None = None, reason: str | None = None,
         "publisher": book.publisher.name if book.publisher else None,
         "series": book.series.name if book.series else None,
         "publication_year": book.publication_year,
-        "category": book.category,
+        "category": category,
+        "raw_category": book.category,
         "difficulty": book.difficulty,
         "tags": tag_names(book),
         "description": book.description,

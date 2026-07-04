@@ -26,6 +26,7 @@ from app.models import (
 from app.services.graph_service import GraphService
 from app.services.serializers import book_card
 from app.services.user_service import build_user_profile
+from app.utils.categories import primary_category
 
 settings = get_settings()
 
@@ -264,8 +265,9 @@ class RecommendService:
                 continue
             # Similar books only receive a softened signal. Negative feedback suppresses same-topic books.
             soft = weight * 0.25
-            if book.category:
-                category_pref[book.category] += soft
+            category = primary_category(book.category)
+            if category:
+                category_pref[category] += soft
             for tag in book.tags:
                 tag_pref[tag.name] += soft
             for author in book.authors:
@@ -285,8 +287,9 @@ class RecommendService:
             book: Book = row["book"]
             base = float(row.get("score") or 0.0)
             score = float(signal["exact"].get(book.id, 0.0))
-            if book.category:
-                score += float(signal["categories"].get(book.category, 0.0))
+            category = primary_category(book.category)
+            if category:
+                score += float(signal["categories"].get(category, 0.0))
             score += sum(float(signal["tags"].get(t.name, 0.0)) for t in book.tags)
             score += sum(float(signal["authors"].get(a.name, 0.0)) for a in book.authors)
             # Keep feedback strong enough to be visible, but bounded to avoid one click dominating all ranking.
@@ -334,8 +337,9 @@ class RecommendService:
             for idx, row in enumerate(remaining):
                 book: Book = row["book"]
                 penalty = 0.0
-                if book.category and category_count[book.category] >= 3:
-                    penalty += 0.10 * (category_count[book.category] - 2)
+                category = primary_category(book.category)
+                if category and category_count[category] >= 3:
+                    penalty += 0.10 * (category_count[category] - 2)
                 for author in book.authors:
                     if author_count[author.name] >= 2:
                         penalty += 0.08 * (author_count[author.name] - 1)
@@ -349,8 +353,9 @@ class RecommendService:
             chosen["score"] = round(best_value, 4)
             chosen.setdefault("rerank", {})["diversity_penalty"] = diversity_penalty
             selected.append(chosen)
-            if book.category:
-                category_count[book.category] += 1
+            category = primary_category(book.category)
+            if category:
+                category_count[category] += 1
             for author in book.authors:
                 author_count[author.name] += 1
         return selected

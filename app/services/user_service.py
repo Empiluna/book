@@ -27,6 +27,7 @@ from app.models import (
 )
 from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card, user_card
+from app.utils.categories import primary_category
 from app.utils.search_terms import is_valid_search_keyword
 
 DEFAULT_SHELVES = [("想读", "want_to_read"), ("在读", "reading"), ("已读", "read")]
@@ -422,8 +423,9 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
             tag_counter[tag.name] += weight
         for author in book.authors:
             author_counter[author.name] += weight
-        if book.category:
-            category_counter[book.category] += weight
+        category = primary_category(book.category)
+        if category:
+            category_counter[category] += weight
 
     _apply_search_interest(db, searches, mark, tag_counter, author_counter, category_counter)
 
@@ -437,8 +439,9 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
                 tag_counter[tag.name] += weight
             for author in book.authors:
                 author_counter[author.name] += weight
-            if book.category:
-                category_counter[book.category] += weight
+            category = primary_category(book.category)
+            if category:
+                category_counter[category] += weight
 
     max_tag = max(tag_counter.values()) if tag_counter else 1
     tag_preferences = [{"name": k, "weight": round(v / max_tag, 3)} for k, v in tag_counter.most_common(12)]

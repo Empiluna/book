@@ -11,6 +11,7 @@ from app.schemas import BookCreate, BookUpdate
 from app.services.graph_service import GraphService
 from app.services.search_service import SearchService
 from app.services.serializers import book_card
+from app.utils.categories import primary_category
 from app.utils.search_terms import is_valid_search_keyword
 
 router = APIRouter(prefix="/books", tags=["公共 · 图书搜索与详情"])
@@ -31,6 +32,8 @@ def _apply_book_payload(db: Session, book: Book, payload: BookCreate | BookUpdat
     tags = data.pop("tags", None)
     publisher = data.pop("publisher", None)
     series = data.pop("series", None)
+    if "category" in data:
+        data["category"] = primary_category(data.get("category"))
     for k, v in data.items():
         setattr(book, k, v)
     if publisher is not None:
@@ -51,7 +54,7 @@ def _apply_book_payload(db: Session, book: Book, payload: BookCreate | BookUpdat
 @router.get("/meta/options")
 def book_options(db: Session = Depends(get_db)):
     books = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
-    cats = sorted({b.category for b in books if b.category})
+    cats = sorted({primary_category(b.category) for b in books if primary_category(b.category)})
     tags = sorted({t.name for b in books for t in b.tags})
     authors = sorted({a.name for b in books for a in b.authors})
     publishers = sorted({b.publisher.name for b in books if b.publisher})

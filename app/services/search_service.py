@@ -11,6 +11,7 @@ from app.models import Author, Book, Publisher, SearchLog, Tag, User
 from app.utils.search_terms import is_valid_search_keyword
 from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card
+from app.utils.categories import category_matches, primary_category
 
 settings = get_settings()
 
@@ -24,7 +25,7 @@ def _book_document(book: Book) -> dict[str, Any]:
         "title": book.title,
         "subtitle": book.subtitle,
         "isbn": book.isbn,
-        "category": book.category,
+        "category": primary_category(book.category),
         "difficulty": book.difficulty,
         "description": book.description,
         "publisher": book.publisher.name if book.publisher else "",
@@ -284,7 +285,7 @@ class SearchService:
         self.ensure_index()
         filters = []
         if category:
-            filters.append({"term": {"category": category}})
+            filters.append({"term": {"category": primary_category(category)}})
         if tag:
             filters.append({"match": {"tags": tag}})
         if author:
@@ -357,8 +358,10 @@ class SearchService:
                 .distinct()
             )
         if category:
-            query = query.filter(Book.category == category)
+            query = query.filter(Book.category.isnot(None))
         books = query.all()
+        if category:
+            books = [b for b in books if category_matches(b.category, category)]
         if tag:
             books = [b for b in books if tag in [t.name for t in b.tags]]
         if author:
@@ -393,8 +396,10 @@ class SearchService:
     def _candidate_books(self, category: str | None = None, tag: str | None = None, author: str | None = None) -> list[Book]:
         query = self.db.query(Book).filter(Book.is_deleted == False)  # noqa: E712
         if category:
-            query = query.filter(Book.category == category)
+            query = query.filter(Book.category.isnot(None))
         books = query.all()
+        if category:
+            books = [b for b in books if category_matches(b.category, category)]
         if tag:
             books = [b for b in books if tag in [t.name for t in b.tags]]
         if author:

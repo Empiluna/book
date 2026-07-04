@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.models import Book, BookComment, Bookmark, ChatHistory, PurchaseClick, ReadingHistory, SearchLog, SystemConfig, User, UserRating
 from app.schemas import AdminUserRoleRequest, AdminUserStatusRequest, SystemConfigUpdate
 from app.services.serializers import book_card, user_card
+from app.utils.categories import primary_category
 
 router = APIRouter(prefix="/admin", tags=["管理员后台"])
 
@@ -31,7 +32,8 @@ def dashboard(admin: User = Depends(require_admin), db: Session = Depends(get_db
     difficulty_distribution = {}
     books_rows = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
     for b in books_rows:
-        categories[b.category or "未分类"] = categories.get(b.category or "未分类", 0) + 1
+        category = primary_category(b.category) or "未分类"
+        categories[category] = categories.get(category, 0) + 1
         difficulty_distribution[b.difficulty or "未设置"] = difficulty_distribution.get(b.difficulty or "未设置", 0) + 1
         score = b.avg_rating or 0
         if score < 2:
