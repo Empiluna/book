@@ -49,10 +49,10 @@ def ensure_default_shelves(db: Session, user_id: int) -> None:
 
 
 def sync_bookshelf_by_reading_status(
-    db: Session,
-    user: User,
-    book_id: int,
-    status: str,
+        db: Session,
+        user: User,
+        book_id: int,
+        status: str,
 ) -> None:
     """Keep default shelves aligned with real reading behavior."""
     if status not in {"reading", "read"}:
@@ -89,11 +89,11 @@ def sync_bookshelf_by_reading_status(
 
 
 def register_user(
-    db: Session,
-    username: str,
-    email: str,
-    password: str,
-    nickname: str | None = None,
+        db: Session,
+        username: str,
+        email: str,
+        password: str,
+        nickname: str | None = None,
 ) -> dict:
     validate_password_strength(password)
     if db.query(User).filter(User.username == username).first():
@@ -166,7 +166,8 @@ def record_search(db: Session, keyword: str, result_count: int, user: User | Non
         db.commit()
 
 
-def record_reading_history(db: Session, user: User, book_id: int, status: str = "read", source: str | None = None) -> dict:
+def record_reading_history(db: Session, user: User, book_id: int, status: str = "read",
+                           source: str | None = None) -> dict:
     if status not in {"want_to_read", "reading", "read"}:
         raise HTTPException(400, "阅读状态只能为 want_to_read / reading / read")
     book = db.get(Book, book_id)
@@ -180,7 +181,8 @@ def record_reading_history(db: Session, user: User, book_id: int, status: str = 
     return {"message": "阅读历史已记录", "book": book_card(book), "status": status}
 
 
-def update_reading_progress(db: Session, user: User, book_id: int, current_page: int, progress_percent: float, reading_minutes: int = 0, last_device: str | None = None) -> dict:
+def update_reading_progress(db: Session, user: User, book_id: int, current_page: int, progress_percent: float,
+                            reading_minutes: int = 0, last_device: str | None = None) -> dict:
     book = db.get(Book, book_id)
     if not book or book.is_deleted:
         raise HTTPException(404, "图书不存在")
@@ -237,7 +239,8 @@ def update_reading_progress(db: Session, user: User, book_id: int, current_page:
         sync_bookshelf_by_reading_status(db, user, book_id, status)
     db.add(ReadingHistory(user_id=user.id, book_id=book_id, status=status, source="progress"))
     db.commit()
-    return {"book": book_card(book), "current_page": row.current_page, "progress_percent": row.progress_percent, "reading_minutes": row.reading_minutes, "status": status, "session_minutes": session_minutes}
+    return {"book": book_card(book), "current_page": row.current_page, "progress_percent": row.progress_percent,
+            "reading_minutes": row.reading_minutes, "status": status, "session_minutes": session_minutes}
 
 
 def rate_book(db: Session, user: User, book_id: int, rating: float) -> dict:
@@ -263,17 +266,19 @@ def update_book_rating(db: Session, book_id: int) -> None:
     values = ratings + comments
     book = db.get(Book, book_id)
     if book:
-        book.rating_count = len(values)
-        book.avg_rating = round(sum(values) / len(values), 2) if values else 0.0
+        book.rating_count = len(values) / 2
+        book.avg_rating = round(sum(values) * 2 / len(values), 2) if values else 0.0
         db.commit()
 
 
-def add_bookmark(db: Session, user: User, book_id: int, shelf_name: str = "想读", reading_status: str = "want_to_read") -> dict:
+def add_bookmark(db: Session, user: User, book_id: int, shelf_name: str = "想读",
+                 reading_status: str = "want_to_read") -> dict:
     if shelf_name == "在读" or reading_status == "reading":
         raise HTTPException(400, "在读状态由阅读行为自动生成，请点击在线试读或保存阅读进度")
 
     ensure_default_shelves(db, user.id)
-    if db.query(Bookshelf).filter_by(user_id=user.id).count() >= 20 and not db.query(Bookshelf).filter_by(user_id=user.id, name=shelf_name).first():
+    if db.query(Bookshelf).filter_by(user_id=user.id).count() >= 20 and not db.query(Bookshelf).filter_by(
+            user_id=user.id, name=shelf_name).first():
         raise HTTPException(400, "书架数量已达上限")
     book = db.get(Book, book_id)
     if not book or book.is_deleted:
@@ -306,12 +311,12 @@ def move_bookmark(db: Session, user: User, book_id: int, from_shelf: str, to_she
 
 
 def _apply_search_interest(
-    db: Session,
-    searches: list[SearchLog],
-    mark,
-    tag_counter: Counter[str],
-    author_counter: Counter[str],
-    category_counter: Counter[str],
+        db: Session,
+        searches: list[SearchLog],
+        mark,
+        tag_counter: Counter[str],
+        author_counter: Counter[str],
+        category_counter: Counter[str],
 ) -> None:
     if not searches:
         return
@@ -371,7 +376,8 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
     ratings = db.query(UserRating).filter_by(user_id=user.id).all()
     bookmarks = db.query(Bookmark).filter_by(user_id=user.id).all()
     progresses = db.query(ReadingProgress).filter_by(user_id=user.id).all()
-    histories = db.query(ReadingHistory).filter_by(user_id=user.id).order_by(ReadingHistory.read_at.desc()).limit(80).all()
+    histories = db.query(ReadingHistory).filter_by(user_id=user.id).order_by(ReadingHistory.read_at.desc()).limit(
+        80).all()
     searches = db.query(SearchLog).filter_by(user_id=user.id).order_by(SearchLog.created_at.desc()).limit(30).all()
 
     # 同一本书可能同时被“想读/在读/评分/书评/进度”多次触发。画像层按 book_id 合并，
@@ -449,7 +455,8 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
     favorite_categories = [{"name": k, "weight": round(v, 2)} for k, v in category_counter.most_common(8)]
     high_rated_book_ids = list(dict.fromkeys([r.book_id for r in ratings if r.rating >= 4.0]))
     if not high_rated_book_ids:
-        high_rated_book_ids = [book_id for book_id, _ in sorted(book_weights.items(), key=lambda x: x[1], reverse=True)[:5]]
+        high_rated_book_ids = [book_id for book_id, _ in
+                               sorted(book_weights.items(), key=lambda x: x[1], reverse=True)[:5]]
 
     # KG 推荐不再只依赖“最近一本书”，而是从用户整体画像中选取 Top 兴趣种子。
     # 种子来源综合评分、书架、进度和历史行为；同一本书只保留最高行为权重。
@@ -489,6 +496,7 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
         "updated_at": datetime.utcnow().isoformat(),
     }
 
+
 def reading_stats(db: Session, user: User) -> dict[str, Any]:
     progresses = db.query(ReadingProgress).filter_by(user_id=user.id).all()
     histories = db.query(ReadingHistory).filter_by(user_id=user.id).all()
@@ -496,11 +504,12 @@ def reading_stats(db: Session, user: User) -> dict[str, Any]:
     sessions = db.query(ReadingSession).filter_by(user_id=user.id).all()
     comments_count = db.query(BookComment).filter_by(user_id=user.id, is_deleted=False).count()
     ratings_count = db.query(UserRating).filter_by(user_id=user.id).count()
-    completed_set = {p.book_id for p in progresses if p.progress_percent >= 100} | {h.book_id for h in histories if h.status == "read"}
+    completed_set = {p.book_id for p in progresses if p.progress_percent >= 100} | {h.book_id for h in histories if
+                                                                                    h.status == "read"}
     completed = len(completed_set)
     reading_set = (
-        {p.book_id for p in progresses if 0 < p.progress_percent < 100}
-        | {b.book_id for b in bookmarks if b.reading_status == "reading"}
+            {p.book_id for p in progresses if 0 < p.progress_percent < 100}
+            | {b.book_id for b in bookmarks if b.reading_status == "reading"}
     )
     reading = len(reading_set - completed_set)
     want_to_read = len({b.book_id for b in bookmarks if b.shelf_name == "想读" or b.reading_status == "want_to_read"})
