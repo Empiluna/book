@@ -11,6 +11,7 @@ from app.schemas import BookCreate, BookUpdate
 from app.services.graph_service import GraphService
 from app.services.search_service import SearchService
 from app.services.serializers import book_card
+from app.utils.search_terms import is_valid_search_keyword
 
 router = APIRouter(prefix="/books", tags=["公共 · 图书搜索与详情"])
 
@@ -82,11 +83,15 @@ def hot_searches(limit: int = Query(10, ge=1, le=30), db: Session = Depends(get_
         .filter(SearchLog.keyword != "")
         .group_by(SearchLog.keyword)
         .order_by(func.count(SearchLog.id).desc(), func.max(SearchLog.created_at).desc())
-        .limit(limit)
+        .limit(limit * 3)
         .all()
     )
     defaults = ["三体", "人工智能", "科幻", "Python", "历史", "机器学习", "文学", "经济"]
-    items = [{"keyword": r.keyword, "count": int(r.count or 0), "last_at": r.last_at.isoformat() if r.last_at else None} for r in rows]
+    items = [
+        {"keyword": r.keyword, "count": int(r.count or 0), "last_at": r.last_at.isoformat() if r.last_at else None}
+        for r in rows
+        if is_valid_search_keyword(r.keyword)
+    ][:limit]
     existing = {x["keyword"] for x in items}
     for keyword in defaults:
         if len(items) >= limit:

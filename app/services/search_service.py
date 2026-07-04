@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Author, Book, Publisher, SearchLog, Tag, User
+from app.utils.search_terms import is_valid_search_keyword
 from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card
 
@@ -274,8 +275,9 @@ class SearchService:
         }
 
     def _record(self, keyword: str | None, total: int, user: User | None) -> None:
-        if keyword:
-            self.db.add(SearchLog(user_id=user.id if user else None, keyword=keyword, result_count=total))
+        text = (keyword or "").strip()
+        if is_valid_search_keyword(text):
+            self.db.add(SearchLog(user_id=user.id if user else None, keyword=text, result_count=total))
             self.db.commit()
 
     def _search_es(self, q: str, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None, record: bool = True) -> dict:

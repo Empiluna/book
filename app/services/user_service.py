@@ -27,6 +27,7 @@ from app.models import (
 )
 from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card, user_card
+from app.utils.search_terms import is_valid_search_keyword
 
 DEFAULT_SHELVES = [("想读", "want_to_read"), ("在读", "reading"), ("已读", "read")]
 
@@ -158,8 +159,9 @@ def change_password(db: Session, user: User, old_password: str, new_password: st
 
 
 def record_search(db: Session, keyword: str, result_count: int, user: User | None = None) -> None:
-    if keyword:
-        db.add(SearchLog(user_id=user.id if user else None, keyword=keyword, result_count=result_count))
+    text = (keyword or "").strip()
+    if is_valid_search_keyword(text):
+        db.add(SearchLog(user_id=user.id if user else None, keyword=text, result_count=result_count))
         db.commit()
 
 
