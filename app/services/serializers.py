@@ -54,6 +54,11 @@ def book_card(book: Book, score: float | None = None, reason: str | None = None,
     links = [purchase_link_card(x) for x in getattr(book, "purchase_links", []) if x.is_active]
     best = min(links, key=lambda x: x["price"] if x.get("price") is not None else 10**9) if links else None
     authors = author_names(book)
+    cover_url = book.cover_url or _cover(book.title, book.category)
+    cover_thumb_url = None
+    if cover_url and cover_url.startswith("/data/book_read/"):
+        name = cover_url.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        cover_thumb_url = f"/data/book_read/thumbs/{name}.jpg"
     return {
         "id": book.id,
         "book_id": book.id,
@@ -70,7 +75,8 @@ def book_card(book: Book, score: float | None = None, reason: str | None = None,
         "tags": tag_names(book),
         "description": book.description,
         "trial_text": book.trial_text,
-        "cover_url": book.cover_url or _cover(book.title, book.category),
+        "cover_url": cover_url,
+        "cover_thumb_url": cover_thumb_url or cover_url,
         "ebook_pdf_url": book.ebook_pdf_url,
         "ebook_epub_url": book.ebook_epub_url,
         "page_count": book.page_count,

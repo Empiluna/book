@@ -37,6 +37,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_static_cache_headers(request, call_next):
+    response = await call_next(request)
+    path = request.url.path.lower()
+    cacheable_exts = (".css", ".js", ".mjs", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".woff2")
+    if path.startswith("/data/book_read/") or path.endswith(cacheable_exts):
+        response.headers.setdefault("Cache-Control", "public, max-age=604800")
+    return response
+
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 ROOT = Path(__file__).resolve().parents[1]
