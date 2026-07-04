@@ -691,6 +691,15 @@ function progressBarHtml(value){
   const n = Math.max(0, Math.min(100, Number(value || 0)));
   return `<span class="history-progress"><i style="width:${n}%"></i></span>`;
 }
+function historyProgressLine(h){
+  const statusText = {want_to_read:'想读', reading:'在读', read:'已读'};
+  const percent = Number(h.progress_percent || 0);
+  const page = Number(h.current_page || 1);
+  const inferredTotal = percent > 0 ? Math.round(page * 100 / percent) : 0;
+  const total = Number(h.total_pages || h.reader_total_pages || inferredTotal || 0);
+  const pageText = total > 0 ? `阅读器第 ${page} / ${total} 页` : `阅读器第 ${page} 页`;
+  return `${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · 读到 ${progressText(percent)} · ${pageText} · ${formatReadAt(h.read_at)}`;
+}
 async function continueReading(bookId, currentPage=1){
   openReader(bookId, currentPage || 1);
 }
@@ -700,11 +709,10 @@ async function loadHistory(){
     return;
   }
   const data = await api('/user/history').catch(()=>({items:[]}));
-  const statusText = {want_to_read:'想读', reading:'在读', read:'已读'};
   $('historyList').innerHTML = (data.items||[]).slice(0,12).map(h=>{
     const percent = Number(h.progress_percent || 0);
     const page = Number(h.current_page || 1);
-    return `<div class="mini-item history-item" onclick="openDetail(${h.book.id})"><div class="history-main"><b>${h.book.title}</b><br><span>${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · 已读 ${progressText(percent)} · 第 ${page} 页 · ${formatReadAt(h.read_at)}</span>${progressBarHtml(percent)}</div><button onclick="event.stopPropagation();continueReading(${h.book.id}, ${page})">继续阅读</button></div>`;
+    return `<div class="mini-item history-item" onclick="openDetail(${h.book.id})"><div class="history-main"><b>${h.book.title}</b><br><span>${historyProgressLine(h)}</span>${progressBarHtml(percent)}</div><button onclick="event.stopPropagation();continueReading(${h.book.id}, ${page})">继续阅读</button></div>`;
   }).join('') || '<span class="meta">暂无阅读历史。</span>';
 }
 async function loadProfile(){
@@ -799,7 +807,7 @@ async function loadProfile(){
     stat('书架数量',stats.shelf_count);
 
   $('tagCloud').innerHTML = (profile.tag_preferences||[])
-    .map(t=>`<span class="cloud" style="font-size:${12+18*t.weight}px">${t.name}</span>`)
+    .map(t=>`<span class="cloud" style="--weight:${Math.max(0, Math.min(1, Number(t.weight || 0))).toFixed(3)}">${t.name}</span>`)
     .join('');
 
   $('profileBooks').innerHTML = (profile.recent_books||[])

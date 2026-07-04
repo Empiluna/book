@@ -150,6 +150,15 @@
       color:var(--ink);
       outline:none;
     }
+    .jump-btn{
+      height:26px;
+      padding:0 10px;
+      border:0;
+      border-radius:8px;
+      background:linear-gradient(135deg,var(--brand),var(--brand-2));
+      color:#fff;
+      font-size:12px;
+    }
     .zoom{
       min-width:58px;
       text-align:center;
@@ -163,6 +172,31 @@
       overflow:auto;
       padding:28px;
       scroll-behavior:smooth;
+      scrollbar-width:auto;
+      scrollbar-color:rgba(31,41,55,.5) rgba(148,163,184,.16);
+    }
+    .stage::-webkit-scrollbar,
+    .epubbox::-webkit-scrollbar{
+      width:14px;
+      height:14px;
+    }
+    .stage::-webkit-scrollbar-track,
+    .epubbox::-webkit-scrollbar-track{
+      background:rgba(148,163,184,.16);
+      border-radius:999px;
+    }
+    .stage::-webkit-scrollbar-thumb,
+    .epubbox::-webkit-scrollbar-thumb{
+      min-height:52px;
+      border:3px solid transparent;
+      border-radius:999px;
+      background:rgba(31,41,55,.5);
+      background-clip:content-box;
+    }
+    .stage::-webkit-scrollbar-thumb:hover,
+    .epubbox::-webkit-scrollbar-thumb:hover{
+      background:rgba(31,41,55,.72);
+      background-clip:content-box;
     }
     body.epub-mode{overflow:hidden}
     body.epub-mode .stage{
@@ -219,8 +253,8 @@
       margin:0 auto;
       overflow-x:hidden;
       overflow-y:auto;
-      scrollbar-width:thin;
-      scrollbar-color:rgba(31,41,55,.38) transparent;
+      scrollbar-width:auto;
+      scrollbar-color:rgba(31,41,55,.5) rgba(148,163,184,.16);
     }
     .epub-chapter{
       max-width:760px;
@@ -296,7 +330,12 @@
     }
     .night .stage{
       background:radial-gradient(circle at 28% 0,rgba(37,99,235,.14),transparent 28%),#0b1020;
+      scrollbar-color:rgba(226,232,240,.58) rgba(15,23,42,.8);
     }
+    .night .stage::-webkit-scrollbar-track,
+    .night .epubbox::-webkit-scrollbar-track{background:rgba(15,23,42,.8)}
+    .night .stage::-webkit-scrollbar-thumb,
+    .night .epubbox::-webkit-scrollbar-thumb{background:rgba(226,232,240,.58);background-clip:content-box}
     .night .pdf-page{
       background:#0f172a;
       box-shadow:0 18px 50px rgba(0,0,0,.24);
@@ -334,6 +373,7 @@
       background:#0f172a;
       color:#e5e7eb;
     }
+    .night .jump-btn{color:#fff}
     .night .hint{
       background:#111827;
       color:#cbd5e1;
@@ -367,7 +407,7 @@
       </div>
       <div class="tools">
         <button id="prevBtn" onclick="prevPage()">上一页</button>
-        <div class="pagebox"><input id="pageInput" value="1" inputmode="numeric" onkeydown="if(event.key==='Enter')goPage()"> / <span id="pageTotal">-</span></div>
+        <div class="pagebox"><input id="pageInput" value="1" inputmode="numeric" onkeydown="if(event.key==='Enter')goPage()" onchange="goPage()"> / <span id="pageTotal">-</span><button class="jump-btn" onclick="goPage()">跳转</button></div>
         <button id="nextBtn" onclick="nextPage()">下一页</button>
         <button onclick="zoomOut()">缩小</button>
         <span id="zoomLabel" class="zoom">300%</span>

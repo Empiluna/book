@@ -1229,3 +1229,20 @@
   align-items:flex-start;
   justify-content:flex-end;
 }
+
+.tag-cloud{
+  align-items:center;
+}
+
+.cloud{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:40px;
+  padding:9px 14px;
+  border-radius:16px;
+  font-size:15px;
+  line-height:1.15;
+  transform:scale(calc(.96 + var(--weight, .4) * .08));
+  transform-origin:center;
+}
