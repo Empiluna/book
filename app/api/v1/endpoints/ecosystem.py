@@ -7,7 +7,7 @@ from app.api.deps import get_current_user, get_current_user_optional, require_ad
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models import Book, BookComment, Bookmark, Bookshelf, CommentLike, PurchaseClick, PurchaseLink, RecommendationFeedback, User
-from app.schemas import BookmarkRequest, CommentCreate, CommentUpdate, PurchaseLinkCreate, PurchaseLinkUpdate, ShelfCreateRequest, ShelfRenameRequest
+from app.schemas import AdminBatchCommentPinRequest, AdminBatchIdsRequest, BookmarkRequest, CommentCreate, CommentUpdate, PurchaseLinkCreate, PurchaseLinkUpdate, ShelfCreateRequest, ShelfRenameRequest
 from app.services.serializers import book_card, comment_card, purchase_link_card
 from app.services.user_service import add_bookmark, move_bookmark, reading_stats, update_book_rating
 from app.utils.purchase_channels import build_purchase_channels
@@ -31,29 +31,18 @@ def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dic
                     )
                 )
 
-    has_full_text = bool(book.trial_text and (
-        not book.description
-        or len(book.trial_text) > len(book.description) + 500
-        or len(book.trial_text) > 5000
-    ))
-    missing_fulltext = not book.ebook_pdf_url and not book.ebook_epub_url and not has_full_text
-    text = book.trial_text if has_full_text else (book.description or "暂无试读内容。")
+    text = book.trial_text or book.description or "暂无试读内容。"
     chunks = [text[i:i + 560] for i in range(0, len(text), 560)] or ["暂无试读内容。"]
     allowed_pages = 99999  # unlimited reading
-    pdf_url = book.ebook_pdf_url
-    text_url = pdf_url if pdf_url and pdf_url.lower().endswith(".txt") else None
-    content_type = "missing" if missing_fulltext else ("textfile" if text_url else ("pdf" if pdf_url else ("epub" if book.ebook_epub_url else "text")))
 
     return {
         "book": book_card(book),
         "logged_in": bool(user),
         "allowed_pages": allowed_pages,
-        "content_type": content_type,
-        "pdf_url": None if text_url else pdf_url,
+        "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
+        "pdf_url": book.ebook_pdf_url,
         "epub_url": book.ebook_epub_url,
-        "text_url": text_url,
-        "missing_fulltext": missing_fulltext,
-        "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=raf-4&t={book.id}",
+        "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=raf-2&t={book.id}",
         "total_preview_pages": len(chunks),
         "pages": [{"page": i + 1, "content": c} for i, c in enumerate(chunks)],
         "reader_features": [
@@ -104,7 +93,7 @@ def comments(book_id: int, db: Session = Depends(get_db), user: User | None = De
     my_comment_id = None
     if user:
         liked_ids = {x.comment_id for x in db.query(CommentLike).filter(CommentLike.user_id == user.id, CommentLike.comment_id.in_([c.id for c in rows] or [0])).all()}
-        own = db.query(BookComment).filter_by(book_id=book_id, user_id=user.id, is_deleted=False).order_by(BookComment.created_at.desc()).first()
+        own = next((c for c in rows if c.user_id == user.id), None)
         my_comment_id = own.id if own else None
     ratings = [c.rating for c in rows if c.rating]
     distribution = {str(i): 0 for i in range(1, 6)}
@@ -128,16 +117,6 @@ def comments(book_id: int, db: Session = Depends(get_db), user: User | None = De
 def add_comment(book_id: int, data: CommentCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not db.get(Book, book_id):
         raise HTTPException(404, "图书不存在")
-    existing = db.query(BookComment).filter_by(book_id=book_id, user_id=user.id, is_deleted=False).order_by(BookComment.created_at.desc()).first()
-    if existing:
-        existing.content = data.content
-        existing.rating = data.rating
-        db.commit(); db.refresh(existing)
-        if data.rating:
-            from app.services.user_service import rate_book
-            rate_book(db, user, book_id, data.rating)
-        update_book_rating(db, book_id)
-        return {"message": "评论已更新", "comment": comment_card(existing)}
     comment = BookComment(user_id=user.id, book_id=book_id, content=data.content, rating=data.rating)
     db.add(comment)
     db.commit(); db.refresh(comment)
@@ -190,6 +169,28 @@ def like_comment(comment_id: int, user: User = Depends(get_current_user), db: Se
         db.add(CommentLike(user_id=user.id, comment_id=comment_id)); comment.likes_count += 1; liked = True
     db.commit()
     return {"liked": liked, "likes_count": comment.likes_count}
+
+
+@router.post("/admin/comments/batch/pin")
+def batch_pin_comments(data: AdminBatchCommentPinRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    comments = db.query(BookComment).filter(BookComment.id.in_(data.ids), BookComment.is_deleted == False).all()  # noqa: E712
+    for comment in comments:
+        comment.is_pinned = data.is_pinned
+    db.commit()
+    return {"message": "批量帖子置顶状态已更新", "updated": len(comments), "is_pinned": data.is_pinned}
+
+
+@router.post("/admin/comments/batch/delete")
+def batch_delete_comments(data: AdminBatchIdsRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    comments = db.query(BookComment).filter(BookComment.id.in_(data.ids), BookComment.is_deleted == False).all()  # noqa: E712
+    affected_book_ids = set()
+    for comment in comments:
+        comment.is_deleted = True
+        affected_book_ids.add(comment.book_id)
+    db.commit()
+    for book_id in affected_book_ids:
+        update_book_rating(db, book_id)
+    return {"message": "批量帖子已删除", "deleted": len(comments)}
 
 
 @router.post("/admin/comments/{comment_id}/pin")

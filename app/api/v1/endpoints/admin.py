@@ -9,9 +9,8 @@ from app.api.deps import require_admin
 from app.core.cache import cache
 from app.core.database import get_db
 from app.models import Book, BookComment, Bookmark, ChatHistory, PurchaseClick, ReadingHistory, SearchLog, SystemConfig, User, UserRating
-from app.schemas import AdminUserRoleRequest, AdminUserStatusRequest, SystemConfigUpdate
+from app.schemas import AdminBatchIdsRequest, AdminBatchUserRoleRequest, AdminBatchUserStatusRequest, AdminUserRoleRequest, AdminUserStatusRequest, SystemConfigUpdate
 from app.services.serializers import book_card, user_card
-from app.utils.categories import primary_category
 
 router = APIRouter(prefix="/admin", tags=["管理员后台"])
 
@@ -32,8 +31,7 @@ def dashboard(admin: User = Depends(require_admin), db: Session = Depends(get_db
     difficulty_distribution = {}
     books_rows = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
     for b in books_rows:
-        category = primary_category(b.category) or "未分类"
-        categories[category] = categories.get(category, 0) + 1
+        categories[b.category or "未分类"] = categories.get(b.category or "未分类", 0) + 1
         difficulty_distribution[b.difficulty or "未设置"] = difficulty_distribution.get(b.difficulty or "未设置", 0) + 1
         score = b.avg_rating or 0
         if score < 2:
@@ -97,6 +95,58 @@ def users(q: str | None = None, admin: User = Depends(require_admin), db: Sessio
     if q:
         rows = [u for u in rows if q in u.username or q in u.email]
     return {"items": [user_card(u) for u in rows], "total": len(rows)}
+
+
+@router.put("/users/batch/status")
+def batch_user_status(data: AdminBatchUserStatusRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    users = db.query(User).filter(User.id.in_(data.ids)).all()
+    updated = 0
+    skipped = 0
+    for user in users:
+        # 允许管理员禁用别人，不允许把自己禁用，避免把后台锁死。
+        if user.id == admin.id and data.is_active is False:
+            skipped += 1
+            continue
+        user.is_active = data.is_active
+        updated += 1
+    db.commit()
+    return {"message": "批量用户状态已更新", "updated": updated, "skipped": skipped}
+
+
+@router.put("/users/batch/role")
+def batch_user_role(data: AdminBatchUserRoleRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    users = db.query(User).filter(User.id.in_(data.ids)).all()
+    updated = 0
+    skipped = 0
+    for user in users:
+        # 不允许批量取消自己的管理员身份。
+        if user.id == admin.id and data.is_admin is False:
+            skipped += 1
+            continue
+        user.is_admin = data.is_admin
+        updated += 1
+    db.commit()
+    return {"message": "批量用户角色已更新", "updated": updated, "skipped": skipped}
+
+
+@router.post("/users/batch/delete")
+def batch_delete_users(data: AdminBatchIdsRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    users = db.query(User).filter(User.id.in_(data.ids)).all()
+    deleted = 0
+    skipped = 0
+    for user in users:
+        # 不允许删除当前登录管理员账号。
+        if user.id == admin.id:
+            skipped += 1
+            continue
+        db.delete(user)
+        deleted += 1
+    db.commit()
+    return {"message": "批量用户已删除", "deleted": deleted, "skipped": skipped}
+
+
+
+
 
 
 @router.put("/users/{user_id}/status")
