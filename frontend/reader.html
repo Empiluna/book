@@ -514,10 +514,39 @@
         mode = trial.content_type;
         if(mode==='pdf' && trial.pdf_url) return await loadPdf(trial.pdf_url);
         if(mode==='epub' && trial.epub_url) return await loadEpub(trial.epub_url);
+        if(mode==='textfile' && trial.text_url) return await loadTextFile(trial.text_url);
+        if(mode==='missing' || trial.missing_fulltext) return renderMissingFulltext();
         renderText();
       }catch(e){
         $('stage').innerHTML = '<div class="hint">加载失败：'+e.message+'</div>';
       }
+    }
+
+    function renderMissingFulltext(){
+      document.body.classList.remove('epub-mode');
+      mode='text'; page=1; pageTotal=1; pageTotalKnown = true;
+      $('stage').innerHTML = '<div class="hint">这本书还没有可网页阅读的全文文件。请补充 EPUB、PDF 或 TXT 后再阅读。</div>';
+      updateUi();
+    }
+
+    function textPagesFromContent(text, size=1200){
+      const normalized = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+      const pages = [];
+      for(let i=0; i<normalized.length; i+=size){
+        pages.push({page:pages.length+1, content:escapeHtml(normalized.slice(i, i+size)).replace(/\n/g,'<br>')});
+      }
+      return pages.length ? pages : [{page:1, content:'暂无正文内容'}];
+    }
+
+    async function loadTextFile(url){
+      document.body.classList.remove('epub-mode');
+      mode='text'; page=1; pageTotalKnown = true;
+      $('stage').innerHTML = '<div class="hint">TXT 正在加载...</div>';
+      const res = await fetch(absUrl(url));
+      if(!res.ok) throw new Error('TXT 读取失败：'+res.status);
+      trial.pages = textPagesFromContent(await res.text());
+      trial.total_preview_pages = trial.pages.length;
+      renderText();
     }
 
     function renderText(){

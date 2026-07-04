@@ -31,18 +31,29 @@ def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dic
                     )
                 )
 
-    text = book.trial_text or book.description or "暂无试读内容。"
+    has_full_text = bool(book.trial_text and (
+        not book.description
+        or len(book.trial_text) > len(book.description) + 500
+        or len(book.trial_text) > 5000
+    ))
+    missing_fulltext = not book.ebook_pdf_url and not book.ebook_epub_url and not has_full_text
+    text = book.trial_text if has_full_text else (book.description or "暂无试读内容。")
     chunks = [text[i:i + 560] for i in range(0, len(text), 560)] or ["暂无试读内容。"]
     allowed_pages = 99999  # unlimited reading
+    pdf_url = book.ebook_pdf_url
+    text_url = pdf_url if pdf_url and pdf_url.lower().endswith(".txt") else None
+    content_type = "missing" if missing_fulltext else ("textfile" if text_url else ("pdf" if pdf_url else ("epub" if book.ebook_epub_url else "text")))
 
     return {
         "book": book_card(book),
         "logged_in": bool(user),
         "allowed_pages": allowed_pages,
-        "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
-        "pdf_url": book.ebook_pdf_url,
+        "content_type": content_type,
+        "pdf_url": None if text_url else pdf_url,
         "epub_url": book.ebook_epub_url,
-        "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=raf-3&t={book.id}",
+        "text_url": text_url,
+        "missing_fulltext": missing_fulltext,
+        "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=raf-4&t={book.id}",
         "total_preview_pages": len(chunks),
         "pages": [{"page": i + 1, "content": c} for i, c in enumerate(chunks)],
         "reader_features": [
