@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>管理后台 · 知人知书</title>
   <link rel="stylesheet" href="/static/css/app.css" />
+  <style>
+    .admin-batchbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:rgba(248,250,252,.72)}
+    .admin-batchbar button{padding:8px 12px;border-radius:999px;font-size:12px}
+    .admin-check-all{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:900;color:#334155;margin-right:4px}
+    .admin-check-all input,.admin-row-check{width:16px;height:16px;accent-color:#7c3aed;cursor:pointer}
+    .admin-batch-hint{margin:-2px 0 12px;color:#667085;font-size:12px;font-weight:800}
+    .admin-table th:first-child,.admin-table td:first-child{width:46px;text-align:center}
+    .admin-batchbar .danger-btn{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+  </style>
 </head>
 <body>
   <main class="shell" style="margin-left:0">
@@ -109,6 +118,15 @@
               <button onclick="adminLoadUsers()">搜索</button>
               <button onclick="adminExportUsers()">导出 CSV</button>
             </div>
+            <div class="admin-batchbar">
+              <label class="admin-check-all"><input type="checkbox" id="adminUserCheckAll" onchange="adminToggleAllUsers(this.checked)"> 全选</label>
+              <button onclick="adminBatchUserStatus(false)">批量禁用</button>
+              <button onclick="adminBatchUserStatus(true)">批量启用</button>
+              <button onclick="adminBatchUserRole(false)">批量设为普通用户</button>
+              <button onclick="adminBatchUserRole(true)">批量设为管理员</button>
+              <button class="danger-btn" onclick="adminBatchDeleteUsers()">批量删除</button>
+            </div>
+            <div id="adminUserBatchHint" class="admin-batch-hint">已选择 0 个用户</div>
             <div id="adminUserList" class="admin-table"></div>
           </div>
 
@@ -118,6 +136,13 @@
               <input id="adminCommentUsername" placeholder="用户名" />
               <button onclick="adminLoadComments()">筛选</button>
             </div>
+            <div class="admin-batchbar">
+              <label class="admin-check-all"><input type="checkbox" id="adminCommentCheckAll" onchange="adminToggleAllComments(this.checked)"> 全选</label>
+              <button onclick="adminBatchPinComments(true)">批量置顶</button>
+              <button onclick="adminBatchPinComments(false)">批量取消置顶</button>
+              <button class="danger-btn" onclick="adminBatchDeleteComments()">批量删除帖子</button>
+            </div>
+            <div id="adminCommentBatchHint" class="admin-batch-hint">已选择 0 条帖子</div>
             <div id="adminCommentList" class="admin-table"></div>
           </div>
 
@@ -181,6 +206,6 @@
     </div>
   </div>
 
-  <script src="/static/js/admin.js?v=admin-role-management-1"></script>
+  <script src="/static/js/admin.js?v=admin-batch-management-1"></script>
 </body>
 </html>
