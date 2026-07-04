@@ -326,12 +326,76 @@ async function adminDeleteBook(id, title){
 
 async function adminReindex(){ const r = await api('/books/admin/reindex-search', {method:'POST'}); toast(`已重建索引：${r.indexed || 0} 本`); }
 
+function adminCheckedValues(selector){
+  return Array.from(document.querySelectorAll(selector + ':checked'))
+    .map(x => Number(x.value))
+    .filter(Boolean);
+}
+function adminUpdateBatchHint(type){
+  const ids = type === 'user' ? adminCheckedValues('.admin-user-check') : adminCheckedValues('.admin-comment-check');
+  const hint = type === 'user' ? $('adminUserBatchHint') : $('adminCommentBatchHint');
+  if(hint) hint.textContent = type === 'user' ? `已选择 ${ids.length} 个用户` : `已选择 ${ids.length} 条帖子`;
+}
+function adminToggleAllUsers(checked){
+  document.querySelectorAll('.admin-user-check').forEach(x => x.checked = checked);
+  adminUpdateBatchHint('user');
+}
+function adminToggleAllComments(checked){
+  document.querySelectorAll('.admin-comment-check').forEach(x => x.checked = checked);
+  adminUpdateBatchHint('comment');
+}
+function adminSelectedUserIds(){ return adminCheckedValues('.admin-user-check'); }
+function adminSelectedCommentIds(){ return adminCheckedValues('.admin-comment-check'); }
+async function adminBatchUserStatus(isActive){
+  const ids = adminSelectedUserIds();
+  if(!ids.length) return toast('请先选择用户');
+  if(!confirm(`确认批量${isActive ? '启用' : '禁用'} ${ids.length} 个用户？`)) return;
+  const r = await api('/admin/users/batch/status', {method:'PUT', body:JSON.stringify({ids, is_active:isActive})});
+  toast(`已更新 ${r.updated || 0} 个用户${r.skipped ? `，跳过 ${r.skipped} 个` : ''}`);
+  await Promise.allSettled([adminLoadUsers(), loadAdmin()]);
+}
+async function adminBatchUserRole(isAdminRole){
+  const ids = adminSelectedUserIds();
+  if(!ids.length) return toast('请先选择用户');
+  if(!confirm(`确认批量设为${isAdminRole ? '管理员' : '普通用户'}？`)) return;
+  const r = await api('/admin/users/batch/role', {method:'PUT', body:JSON.stringify({ids, is_admin:isAdminRole})});
+  toast(`已更新 ${r.updated || 0} 个用户${r.skipped ? `，跳过 ${r.skipped} 个` : ''}`);
+  await Promise.allSettled([adminLoadUsers(), loadAdmin()]);
+}
+async function adminBatchDeleteUsers(){
+  const ids = adminSelectedUserIds();
+  if(!ids.length) return toast('请先选择用户');
+  if(!confirm(`确认删除选中的 ${ids.length} 个用户？该操作会同时清理其评论、书架、评分和阅读记录。`)) return;
+  const r = await api('/admin/users/batch/delete', {method:'POST', body:JSON.stringify({ids})});
+  toast(`已删除 ${r.deleted || 0} 个用户${r.skipped ? `，跳过 ${r.skipped} 个` : ''}`);
+  await Promise.allSettled([adminLoadUsers(), loadAdmin()]);
+}
+async function adminBatchPinComments(isPinned){
+  const ids = adminSelectedCommentIds();
+  if(!ids.length) return toast('请先选择帖子');
+  const r = await api('/ecosystem/admin/comments/batch/pin', {method:'POST', body:JSON.stringify({ids, is_pinned:isPinned})});
+  toast(`已更新 ${r.updated || 0} 条帖子`);
+  await adminLoadComments();
+}
+async function adminBatchDeleteComments(){
+  const ids = adminSelectedCommentIds();
+  if(!ids.length) return toast('请先选择帖子');
+  if(!confirm(`确认删除选中的 ${ids.length} 条帖子？`)) return;
+  const r = await api('/ecosystem/admin/comments/batch/delete', {method:'POST', body:JSON.stringify({ids})});
+  toast(`已删除 ${r.deleted || 0} 条帖子`);
+  await Promise.allSettled([adminLoadComments(), loadAdmin()]);
+}
+
+
 async function adminLoadUsers(){
   if(!isAdmin()) return;
   const q = $('adminUserSearch')?.value?.trim();
   const data = await api('/admin/users' + (q ? `?q=${encodeURIComponent(q)}` : '')).catch(e=>({items:[], error:e.message}));
-  if(data.error){ $('adminUserList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
-  $('adminUserList').innerHTML = `<table><thead><tr><th>ID</th><th>用户</th><th>邮箱</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(u=>`<tr><td>${u.id}</td><td>${u.nickname||u.username}<br><span>${u.username}</span></td><td>${u.email}</td><td>${u.is_admin?'管理员':'用户'}</td><td><span class="${u.is_active?'status-ok':'status-bad'}">${u.is_active?'启用':'禁用'}</span></td><td><button onclick="adminToggleUser(${u.id}, ${u.is_active})">${u.is_active?'禁用':'启用'}</button><button onclick="adminToggleRole(${u.id}, ${u.is_admin})">${u.is_admin?'取消管理员':'设为管理员'}</button></td></tr>`).join('') || '<tr><td colspan="6">暂无用户</td></tr>'}</tbody></table>`;
+  if(data.error){ $('adminUserList').innerHTML = `<p class="meta">${html(data.error)}</p>`; return; }
+  const rows = data.items || [];
+  if($('adminUserCheckAll')) $('adminUserCheckAll').checked = false;
+  $('adminUserList').innerHTML = `<table><thead><tr><th>选择</th><th>ID</th><th>用户</th><th>邮箱</th><th>角色</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows.map(u=>`<tr><td><input class="admin-row-check admin-user-check" type="checkbox" value="${u.id}" onchange="adminUpdateBatchHint('user')"></td><td>${u.id}</td><td>${html(u.nickname||u.username)}<br><span>${html(u.username)}</span></td><td>${html(u.email)}</td><td>${u.is_admin?'管理员':'用户'}</td><td><span class="${u.is_active?'status-ok':'status-bad'}">${u.is_active?'启用':'禁用'}</span></td><td><button onclick="adminToggleUser(${u.id}, ${u.is_active})">${u.is_active?'禁用':'启用'}</button><button onclick="adminToggleRole(${u.id}, ${u.is_admin})">${u.is_admin?'取消管理员':'设为管理员'}</button></td></tr>`).join('') || '<tr><td colspan="7">暂无用户</td></tr>'}</tbody></table>`;
+  adminUpdateBatchHint('user');
 }
 
 async function adminToggleUser(id, active){ await api(`/admin/users/${id}/status`, {method:'PUT', body:JSON.stringify({is_active:!active})}); toast('用户状态已更新'); adminLoadUsers(); }
@@ -344,8 +408,11 @@ async function adminLoadComments(){
   if($('adminCommentBookId')?.value) qs.push(`book_id=${$('adminCommentBookId').value}`);
   if($('adminCommentUsername')?.value) qs.push(`username=${encodeURIComponent($('adminCommentUsername').value)}`);
   const data = await api('/ecosystem/admin/comments' + (qs.length ? `?${qs.join('&')}` : '')).catch(e=>({items:[], error:e.message}));
-  if(data.error){ $('adminCommentList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
-  $('adminCommentList').innerHTML = `<table><thead><tr><th>ID</th><th>图书</th><th>用户</th><th>内容</th><th>状态</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(c=>`<tr><td>${c.id}</td><td>${c.book_title||c.book_id}</td><td>${c.nickname||c.username}</td><td>${c.content}</td><td>${c.is_pinned?'置顶':'普通'}</td><td><button onclick="adminPinComment(${c.id})">${c.is_pinned?'取消置顶':'置顶'}</button><button class="danger-btn" onclick="adminDeleteComment(${c.id})">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无评论</td></tr>'}</tbody></table>`;
+  if(data.error){ $('adminCommentList').innerHTML = `<p class="meta">${html(data.error)}</p>`; return; }
+  const rows = data.items || [];
+  if($('adminCommentCheckAll')) $('adminCommentCheckAll').checked = false;
+  $('adminCommentList').innerHTML = `<table><thead><tr><th>选择</th><th>ID</th><th>图书</th><th>用户</th><th>内容</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows.map(c=>`<tr><td><input class="admin-row-check admin-comment-check" type="checkbox" value="${c.id}" onchange="adminUpdateBatchHint('comment')"></td><td>${c.id}</td><td>${html(c.book_title||c.book_id)}</td><td>${html(c.nickname||c.username)}<br><span>⭐ ${html(c.rating||'-')} · 赞 ${html(c.likes_count||0)}</span></td><td>${html(c.content)}</td><td><span class="${c.is_pinned?'status-ok':''}">${c.is_pinned?'置顶':'普通'}</span></td><td><button onclick="adminPinComment(${c.id})">${c.is_pinned?'取消置顶':'置顶'}</button><button class="danger-btn" onclick="adminDeleteComment(${c.id})">删除</button></td></tr>`).join('') || '<tr><td colspan="7">暂无帖子</td></tr>'}</tbody></table>`;
+  adminUpdateBatchHint('comment');
 }
 
 async function adminPinComment(id){ await api(`/ecosystem/admin/comments/${id}/pin`, {method:'POST'}); toast('置顶状态已更新'); adminLoadComments(); }
