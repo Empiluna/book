@@ -1164,3 +1164,13 @@
   border-radius:999px;
   background:linear-gradient(90deg,#7c3aed,#0ea5e9);
 }
+
+.modal-card{
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+
+.modal-card::-webkit-scrollbar{
+  width:0;
+  height:0;
+}
