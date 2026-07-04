@@ -11,6 +11,7 @@ let graphBookOptionsLoaded = false;
 let currentView = 'home';
 let currentAppState = {view:'home'};
 let applyingHistoryState = false;
+let reviewEditingCommentId = null;
 
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
 async function api(path, opts={}){
@@ -222,22 +223,24 @@ function reviewSummaryHtml(comments){
 }
 function reviewCardHtml(c, bookId){
   const mine = currentUser && c.user_id === currentUser.id;
+  const canManage = mine || isAdmin();
   return `<article class="review-card ${c.is_pinned ? 'pinned' : ''}">
     <div class="review-head"><div><b>${attr(c.nickname || c.username || '匿名用户')}</b>${c.is_pinned?'<span class="review-pin">置顶</span>':''}<div class="stars">${stars(c.rating)}</div></div><time>${(c.created_at||'').slice(0,10)}</time></div>
     <p>${attr(c.content || '')}</p>
     <div class="review-actions">
       <button class="ghost ${c.liked?'active':''}" onclick="likeComment(${c.id}, ${bookId})">❤ ${c.likes_count||0}</button>
-      ${mine || isAdmin() ? `<button class="ghost" onclick="editComment(${c.id}, ${bookId}, '${attr(c.content)}', '${c.rating||''}')">编辑</button>` : ''}${isAdmin() ? `<button class="ghost danger" onclick="deleteComment(${c.id}, ${bookId})">删除</button>` : ''}
+      ${canManage ? `<button class="ghost" onclick="editComment(${c.id}, ${bookId})">编辑</button><button class="ghost danger" onclick="deleteComment(${c.id}, ${bookId})">删除</button>` : ''}
     </div>
   </article>`;
 }
 function reviewsHtml(bookId, comments){
   const items = comments.items || [];
   const list = items.length ? items.map(c=>reviewCardHtml(c, bookId)).join('') : '<div class="empty-review">还没有书评，来写第一条吧。</div>';
-  return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating"><option value="5">5 星</option><option value="4">4 星</option><option value="3">3 星</option><option value="2">2 星</option><option value="1">1 星</option></select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
+  return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose" id="reviewCompose"><div><b id="reviewComposeTitle">写一条书评</b><span id="reviewComposeHint">分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating"><option value="5">5 星</option><option value="4">4 星</option><option value="3">3 星</option><option value="2">2 星</option><option value="1">1 星</option></select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><div class="review-compose-actions"><button class="primary" id="reviewSubmitBtn" onclick="submitReview(${bookId})">发布书评</button><button class="ghost hidden" id="reviewCancelBtn" onclick="cancelReviewEdit()">取消编辑</button></div></div><div class="review-list">${list}</div></section>`;
 }
 async function openDetail(id, opts={}){
   const push = opts.push !== false;
+  reviewEditingCommentId = null;
   const b = await api(`/books/${id}`); activeBook=b;
   await loadShelfState();
   recordFeedback(id, 'click', 'detail');
@@ -305,36 +308,62 @@ async function toggleShelf(event, id, shelf){
 }
 async function addShelf(id, shelf){ return toggleShelf(null, id, shelf); }
 function scrollToReviews(){ const el=document.querySelector('#detailContent .reviews-section'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function resetReviewForm(){
+  reviewEditingCommentId = null;
+  if($('reviewComposeTitle')) $('reviewComposeTitle').textContent = '写一条书评';
+  if($('reviewComposeHint')) $('reviewComposeHint').textContent = '分享读后感，也可以顺手给本书评分。';
+  if($('reviewSubmitBtn')) $('reviewSubmitBtn').textContent = '发布书评';
+  if($('reviewCancelBtn')) $('reviewCancelBtn').classList.add('hidden');
+  if($('reviewContent')) $('reviewContent').value = '';
+  if($('reviewRating')) $('reviewRating').value = '5';
+}
+function cancelReviewEdit(){
+  resetReviewForm();
+  $('reviewContent')?.focus();
+}
 async function submitReview(id){
   if(!token) return toast('请先登录');
   const content = $('reviewContent')?.value.trim();
   const rating = Number($('reviewRating')?.value || 5);
   if(!content) return toast('请先写一点书评内容');
-  await api(`/ecosystem/comments/${id}`, {method:'POST', body:JSON.stringify({content, rating})});
-  toast('评论已发布');
-  openDetail(id); loadProfile();
+  if(reviewEditingCommentId){
+    await api(`/ecosystem/comments/${reviewEditingCommentId}`, {method:'PUT', body:JSON.stringify({content, rating})});
+    toast('书评已更新');
+  }else{
+    await api(`/ecosystem/comments/${id}`, {method:'POST', body:JSON.stringify({content, rating})});
+    toast('评论已发布');
+  }
+  resetReviewForm();
+  openDetail(id, {push:false}); loadProfile();
 }
 async function commentBook(id){ return submitReview(id); }
 async function likeComment(commentId, bookId){
   if(!token) return toast('请先登录');
   await api(`/ecosystem/comments/${commentId}/like`, {method:'POST'});
-  openDetail(bookId);
+  openDetail(bookId, {push:false});
 }
-async function editComment(commentId, bookId, oldContent, oldRating){
+async function editComment(commentId, bookId){
   if(!token) return toast('请先登录');
-  const content = prompt('编辑书评', oldContent || '');
-  if(!content) return;
-  const rating = Number(prompt('评分 1-5', oldRating || '5')) || null;
-  await api(`/ecosystem/comments/${commentId}`, {method:'PUT', body:JSON.stringify({content, rating})});
-  toast('书评已更新');
-  openDetail(bookId);
+  const data = await api(`/ecosystem/comments/${bookId}`).catch(()=>({items:[]}));
+  const comment = (data.items || []).find(c => c.id === commentId);
+  if(!comment) return toast('没有找到这条书评');
+  reviewEditingCommentId = commentId;
+  if($('reviewContent')) $('reviewContent').value = comment.content || '';
+  if($('reviewRating')) $('reviewRating').value = String(Math.max(1, Math.min(5, Math.round(Number(comment.rating || 5)))));
+  if($('reviewComposeTitle')) $('reviewComposeTitle').textContent = '编辑书评';
+  if($('reviewComposeHint')) $('reviewComposeHint').textContent = '正在编辑你已发布的评论，修改内容或分数后提交。';
+  if($('reviewSubmitBtn')) $('reviewSubmitBtn').textContent = '提交修改';
+  if($('reviewCancelBtn')) $('reviewCancelBtn').classList.remove('hidden');
+  const compose = $('reviewCompose');
+  if(compose) compose.scrollIntoView({behavior:'smooth', block:'start'});
+  setTimeout(()=>$('reviewContent')?.focus(), 260);
 }
 async function deleteComment(commentId, bookId){
   if(!token) return toast('请先登录');
   if(!confirm('确认删除这条书评？')) return;
   await api(`/ecosystem/comments/${commentId}`, {method:'DELETE'});
   toast('书评已删除');
-  openDetail(bookId);
+  openDetail(bookId, {push:false});
 }
 
 function graphTypeLabel(type){ return ({Profile:'画像',InterestCluster:'兴趣簇',SeedBook:'种子书',Book:'图书',Author:'作者',Tag:'标签',Publisher:'出版社',Series:'丛书/系列',Field:'领域',Audience:'适读人群',Difficulty:'阅读难度',Keyword:'关键词',Topic:'主题'}[type] || type || '节点'); }
