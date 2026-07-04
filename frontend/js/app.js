@@ -8,10 +8,6 @@ let readerStartAt = null;
 let readerBookId = null;
 let graphBookOptions = [];
 let graphBookOptionsLoaded = false;
-let currentView = 'home';
-let currentAppState = {view:'home'};
-let applyingHistoryState = false;
-let reviewEditingCommentId = null;
 
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
 async function api(path, opts={}){
@@ -61,26 +57,6 @@ function refreshShelfButtons(bookId){
     btn.textContent = active ? `取消${shelf}` : `加入${shelf}`;
   });
 }
-function stateUrl(state){
-  if(state?.reader) return `#reader-${state.reader}`;
-  if(state?.detail) return `#book-${state.detail}`;
-  if(state?.view && state.view !== 'home') return `#${state.view}`;
-  return location.pathname || '/';
-}
-function pushAppState(state, replace=false){
-  currentAppState = {...state};
-  const method = replace ? 'replaceState' : 'pushState';
-  history[method](currentAppState, '', stateUrl(currentAppState));
-}
-function hideReaderModal(){
-  $('readerModal')?.classList.add('hidden');
-  if($('readerContent')) $('readerContent').innerHTML = '';
-  readerStartAt = null;
-  readerBookId = null;
-}
-function hideDetailModal(){
-  $('detailModal')?.classList.add('hidden');
-}
 async function loadShelfState(){
   shelfState = {};
   if(!token) return shelfState;
@@ -101,8 +77,7 @@ async function loadShelfState(){
 function bookCard(b){
   const id = b.id || b.book_id;
   const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
-  const cover = b.cover_thumb_url || b.cover_url || '';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" alt="${attr(b.title)}封面" loading="lazy" decoding="async" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4><span class="book-rating">⭐ ${b.avg_rating||0}</span></div><p class="meta book-meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${b.cover_url||''}" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
 }
 async function recordFeedback(bookId, eventType, source='frontend'){
   if(!bookId) return;
@@ -211,12 +186,6 @@ async function recordReadingAction(bookId, status='reading', source='detail'){
   if(!token) return;
   api(`/user/history/${bookId}?status=${encodeURIComponent(status)}&source=${encodeURIComponent(source)}`, {method:'POST'}).catch(()=>{});
 }
-async function savedReaderPage(bookId){
-  if(!token) return 1;
-  const data = await api('/user/progress').catch(()=>({items:[]}));
-  const row = (data.items || []).find(x => String(x.book?.id || x.book?.book_id) === String(bookId));
-  return Math.max(1, Number(row?.current_page || 1));
-}
 function stars(value){
   const rating = Number(value || 0);
   return Array.from({length:5}, (_, i)=>`<span class="${i < Math.round(rating) ? 'on' : ''}">★</span>`).join('');
@@ -230,24 +199,21 @@ function reviewSummaryHtml(comments){
 }
 function reviewCardHtml(c, bookId){
   const mine = currentUser && c.user_id === currentUser.id;
-  const canManage = mine || isAdmin();
   return `<article class="review-card ${c.is_pinned ? 'pinned' : ''}">
     <div class="review-head"><div><b>${attr(c.nickname || c.username || '匿名用户')}</b>${c.is_pinned?'<span class="review-pin">置顶</span>':''}<div class="stars">${stars(c.rating)}</div></div><time>${(c.created_at||'').slice(0,10)}</time></div>
     <p>${attr(c.content || '')}</p>
     <div class="review-actions">
       <button class="ghost ${c.liked?'active':''}" onclick="likeComment(${c.id}, ${bookId})">❤ ${c.likes_count||0}</button>
-      ${canManage ? `<button class="ghost" onclick="editComment(${c.id}, ${bookId})">编辑</button><button class="ghost danger" onclick="deleteComment(${c.id}, ${bookId})">删除</button>` : ''}
+      ${mine || isAdmin() ? `<button class="ghost" onclick="editComment(${c.id}, ${bookId}, '${attr(c.content)}', '${c.rating||''}')">编辑</button>` : ''}${isAdmin() ? `<button class="ghost danger" onclick="deleteComment(${c.id}, ${bookId})">删除</button>` : ''}
     </div>
   </article>`;
 }
 function reviewsHtml(bookId, comments){
   const items = comments.items || [];
   const list = items.length ? items.map(c=>reviewCardHtml(c, bookId)).join('') : '<div class="empty-review">还没有书评，来写第一条吧。</div>';
-  return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose" id="reviewCompose"><div><b id="reviewComposeTitle">写一条书评</b><span id="reviewComposeHint">分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating"><option value="5">5 星</option><option value="4">4 星</option><option value="3">3 星</option><option value="2">2 星</option><option value="1">1 星</option></select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><div class="review-compose-actions"><button class="primary" id="reviewSubmitBtn" onclick="submitReview(${bookId})">发布书评</button><button class="ghost hidden" id="reviewCancelBtn" onclick="cancelReviewEdit()">取消编辑</button></div></div><div class="review-list">${list}</div></section>`;
+  return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating"><option value="5">5 星</option><option value="4">4 星</option><option value="3">3 星</option><option value="2">2 星</option><option value="1">1 星</option></select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
 }
-async function openDetail(id, opts={}){
-  const push = opts.push !== false;
-  reviewEditingCommentId = null;
+async function openDetail(id){
   const b = await api(`/books/${id}`); activeBook=b;
   await loadShelfState();
   recordFeedback(id, 'click', 'detail');
@@ -255,47 +221,19 @@ async function openDetail(id, opts={}){
   const comments = await api(`/ecosystem/comments/${id}`).catch(()=>({items:[]}));
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
   $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
-  const myCommentId = comments.summary?.my_comment_id;
-  if(myCommentId){
-    const mine = (comments.items || []).find(c => c.id === myCommentId);
-    enterReviewEdit(mine, false);
-  }
   $('detailModal').classList.remove('hidden');
-  if(push) pushAppState({view:currentView, detail:id});
 }
-function closeDetail(){
-  if(currentAppState?.detail && !currentAppState?.reader) history.back();
-  else hideDetailModal();
-}
-async function openReader(id, startPage=null, opts={}){
-  const push = opts.push !== false;
+function closeDetail(){ $('detailModal').classList.add('hidden'); }
+async function openReader(id, startPage=1){
   const data = await api(`/ecosystem/trial/${id}`);
-  const explicitPage = Number(startPage || 0);
-  const targetPage = explicitPage > 0 ? Math.max(1, explicitPage) : await savedReaderPage(id);
   readerStartAt = Date.now(); readerBookId = id;
   recordReadingAction(id, 'reading', 'reader');
   let readerUrl = data.reader_url;
-  readerUrl += (readerUrl.includes('?') ? '&' : '?') + `page=${encodeURIComponent(targetPage)}`;
+  readerUrl += (readerUrl.includes('?') ? '&' : '?') + `page=${encodeURIComponent(startPage || 1)}`;
   $('readerContent').innerHTML = `<iframe src="${readerUrl}" class="reader-frame" title="${data.book.title} 在线试读"></iframe>`;
   $('readerModal').classList.remove('hidden');
-  if(push) pushAppState({view:currentView, detail:activeBook?.id, reader:id, page:targetPage});
 }
-function closeReader(){
-  if(currentAppState?.reader) history.back();
-  else hideReaderModal();
-}
-async function openReaderFromUrl(params=new URLSearchParams(location.search)){
-  const readerId = Number(params.get('reader') || 0);
-  if(!readerId) return;
-  const startPage = Math.max(1, Number(params.get('page')) || 1);
-  pushAppState({view:'home'}, true);
-  try{
-    await openDetail(readerId, {push:true});
-    await openReader(readerId, startPage, {push:true});
-  }catch(e){
-    toast(e.message || '阅读器打开失败');
-  }
-}
+function closeReader(){ $('readerModal').classList.add('hidden'); }
 async function saveProgress(id, percent){
   if(!token) return toast('请先登录');
   const minutes = readerStartAt && readerBookId === id ? Math.max(0, Math.round((Date.now() - readerStartAt) / 60000)) : 0;
@@ -322,68 +260,36 @@ async function toggleShelf(event, id, shelf){
 }
 async function addShelf(id, shelf){ return toggleShelf(null, id, shelf); }
 function scrollToReviews(){ const el=document.querySelector('#detailContent .reviews-section'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
-function resetReviewForm(){
-  reviewEditingCommentId = null;
-  if($('reviewComposeTitle')) $('reviewComposeTitle').textContent = '写一条书评';
-  if($('reviewComposeHint')) $('reviewComposeHint').textContent = '分享读后感，也可以顺手给本书评分。';
-  if($('reviewSubmitBtn')) $('reviewSubmitBtn').textContent = '发布书评';
-  if($('reviewCancelBtn')) $('reviewCancelBtn').classList.add('hidden');
-  if($('reviewContent')) $('reviewContent').value = '';
-  if($('reviewRating')) $('reviewRating').value = '5';
-}
-function cancelReviewEdit(){
-  resetReviewForm();
-  $('reviewContent')?.focus();
-}
-function enterReviewEdit(comment, scroll=false){
-  if(!comment) return;
-  reviewEditingCommentId = comment.id;
-  if($('reviewContent')) $('reviewContent').value = comment.content || '';
-  if($('reviewRating')) $('reviewRating').value = String(Math.max(1, Math.min(5, Math.round(Number(comment.rating || 5)))));
-  if($('reviewComposeTitle')) $('reviewComposeTitle').textContent = '编辑我的书评';
-  if($('reviewComposeHint')) $('reviewComposeHint').textContent = '你已经写过书评，这里会更新原来的评论。';
-  if($('reviewSubmitBtn')) $('reviewSubmitBtn').textContent = '提交修改';
-  if($('reviewCancelBtn')) $('reviewCancelBtn').classList.remove('hidden');
-  if(scroll){
-    const compose = $('reviewCompose');
-    if(compose) compose.scrollIntoView({behavior:'smooth', block:'start'});
-    setTimeout(()=>$('reviewContent')?.focus(), 260);
-  }
-}
 async function submitReview(id){
   if(!token) return toast('请先登录');
   const content = $('reviewContent')?.value.trim();
   const rating = Number($('reviewRating')?.value || 5);
   if(!content) return toast('请先写一点书评内容');
-  if(reviewEditingCommentId){
-    await api(`/ecosystem/comments/${reviewEditingCommentId}`, {method:'PUT', body:JSON.stringify({content, rating})});
-    toast('书评已更新');
-  }else{
-    await api(`/ecosystem/comments/${id}`, {method:'POST', body:JSON.stringify({content, rating})});
-    toast('评论已发布');
-  }
-  resetReviewForm();
-  openDetail(id, {push:false}); loadProfile();
+  await api(`/ecosystem/comments/${id}`, {method:'POST', body:JSON.stringify({content, rating})});
+  toast('评论已发布');
+  openDetail(id); loadProfile();
 }
 async function commentBook(id){ return submitReview(id); }
 async function likeComment(commentId, bookId){
   if(!token) return toast('请先登录');
   await api(`/ecosystem/comments/${commentId}/like`, {method:'POST'});
-  openDetail(bookId, {push:false});
+  openDetail(bookId);
 }
-async function editComment(commentId, bookId){
+async function editComment(commentId, bookId, oldContent, oldRating){
   if(!token) return toast('请先登录');
-  const data = await api(`/ecosystem/comments/${bookId}`).catch(()=>({items:[]}));
-  const comment = (data.items || []).find(c => c.id === commentId);
-  if(!comment) return toast('没有找到这条书评');
-  enterReviewEdit(comment, true);
+  const content = prompt('编辑书评', oldContent || '');
+  if(!content) return;
+  const rating = Number(prompt('评分 1-5', oldRating || '5')) || null;
+  await api(`/ecosystem/comments/${commentId}`, {method:'PUT', body:JSON.stringify({content, rating})});
+  toast('书评已更新');
+  openDetail(bookId);
 }
 async function deleteComment(commentId, bookId){
   if(!token) return toast('请先登录');
   if(!confirm('确认删除这条书评？')) return;
   await api(`/ecosystem/comments/${commentId}`, {method:'DELETE'});
   toast('书评已删除');
-  openDetail(bookId, {push:false});
+  openDetail(bookId);
 }
 
 function graphTypeLabel(type){ return ({Profile:'画像',InterestCluster:'兴趣簇',SeedBook:'种子书',Book:'图书',Author:'作者',Tag:'标签',Publisher:'出版社',Series:'丛书/系列',Field:'领域',Audience:'适读人群',Difficulty:'阅读难度',Keyword:'关键词',Topic:'主题'}[type] || type || '节点'); }
@@ -657,10 +563,127 @@ function renderGraph(data){
   svg.innerHTML=`<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(71,85,105,.38)"/></marker></defs>${line}${ns}`;
 }
 
+function uniquePreviewBooks(...groups){
+  const seen = new Set();
+  const result = [];
+  groups.flat().forEach(book => {
+    const id = book?.id || book?.book_id;
+    if(!id || seen.has(String(id))) return;
+    seen.add(String(id));
+    result.push(book);
+  });
+  return result;
+}
+function guestShelfBookCard(book, badge='热门推荐'){
+  const id = book.id || book.book_id;
+  const authors = (book.authors || []).join('、') || book.author || '未知作者';
+  const tags = (book.tags || []).slice(0, 3).map(t => `<span class="tag">${attr(t)}</span>`).join('');
+  const rating = Number(book.avg_rating || 0).toFixed(1).replace('.0','');
+  return `
+    <article class="guest-book-card" onclick="openDetail(${id})">
+      <div class="guest-cover-wrap">
+        <img class="guest-cover" src="${book.cover_url || ''}" alt="${attr(book.title || '')}" onerror="this.style.display='none';this.parentElement.classList.add('no-cover')">
+        <span>${badge}</span>
+      </div>
+      <div class="guest-book-body">
+        <h4 title="${attr(book.title || '')}">${book.title || '未命名图书'}</h4>
+        <p class="guest-meta">${authors} · ${book.category || '图书'} · ⭐ ${rating || 0}</p>
+        <div class="tags">${tags}</div>
+        <div class="guest-card-actions">
+          <button onclick="event.stopPropagation(); window.location.href='/login?v=shelf'">登录后加入书架</button>
+          <button class="ghost" onclick="event.stopPropagation(); openReader(${id})">在线试读</button>
+        </div>
+      </div>
+    </article>`;
+}
+function guestShelfSection(title, desc, books, badge){
+  if(!books.length) return '';
+  return `
+    <section class="guest-shelf-section">
+      <div class="guest-section-head">
+        <div>
+          <h4>${title}</h4>
+        </div>
+        <button class="ghost" onclick="activateView('search')">查看更多</button>
+      </div>
+      <div class="guest-book-grid">${books.map(b => guestShelfBookCard(b, badge)).join('')}</div>
+    </section>`;
+}
+async function loadGuestShelfPreview(){
+  const grid = $('shelfGrid');
+  if(!grid) return;
+  grid.classList.add('guest-shelf-grid');
+  grid.innerHTML = `
+    <div class="guest-shelf-hero">
+      <div class="guest-shelf-copy">
+        <span class="pill">Guest Preview</span>
+        <h3>登录后管理私人书架</h3>
+        <div class="guest-shelf-actions">
+          <button class="primary" onclick="window.location.href='/login?v=shelf'">登录 / 注册</button>
+          <button class="ghost" onclick="activateView('search')">发现图书</button>
+        </div>
+      </div>
+      <div class="guest-shelf-stats">
+        ${stat('热门','0')}
+        ${stat('高分','0')}
+        ${stat('分类','3')}
+      </div>
+    </div>
+    <div class="guest-loading">正在为你加载热门和高分图书...</div>`;
+
+  try{
+    const [hotRes, ratingRes] = await Promise.allSettled([
+      api('/recommend/hot?limit=8'),
+      api('/books?sort=rating&limit=8')
+    ]);
+    const hot = hotRes.status === 'fulfilled' ? (hotRes.value.items || hotRes.value.books || hotRes.value.data || []) : [];
+    const rated = ratingRes.status === 'fulfilled' ? (ratingRes.value.items || ratingRes.value.books || ratingRes.value.data || []) : [];
+    const hotBooks = uniquePreviewBooks(hot).slice(0, 6);
+    const ratedBooks = uniquePreviewBooks(rated, hot).filter(b => !hotBooks.some(x => String(x.id || x.book_id) === String(b.id || b.book_id))).slice(0, 6);
+    const fallback = uniquePreviewBooks(hotBooks, ratedBooks).slice(0, 6);
+
+    grid.innerHTML = `
+      <div class="guest-shelf-hero">
+        <div class="guest-shelf-copy">
+          <span class="pill">Guest Preview</span>
+          <h3>登录后解锁完整书架</h3>
+          <div class="guest-shelf-actions">
+            <button class="primary" onclick="window.location.href='/login?v=shelf'">登录后查看书架</button>
+          </div>
+        </div>
+        <div class="guest-shelf-stats">
+          ${stat('热门', hotBooks.length || fallback.length)}
+          ${stat('高分', ratedBooks.length || fallback.length)}
+          ${stat('分类', 3)}
+        </div>
+      </div>
+      ${guestShelfSection('热门图书推荐', '先看看系统里近期热度较高、适合加入书架的图书。', hotBooks.length ? hotBooks : fallback, '热门推荐')}
+      ${guestShelfSection('高分图书精选', '根据评分排序展示的优质图书，适合登录后沉淀到个人书架。', ratedBooks.length ? ratedBooks : fallback, '高分图书')}
+    `;
+  }catch(e){
+    grid.innerHTML = `
+      <div class="guest-shelf-hero">
+        <div class="guest-shelf-copy">
+          <span class="pill">Guest Preview</span>
+          <h3>登录后查看个人书架</h3>
+          <div class="guest-shelf-actions">
+            <button class="primary" onclick="window.location.href='/login?v=shelf'">登录 / 注册</button>
+            <button class="ghost" onclick="activateView('home')">返回首页</button>
+          </div>
+        </div>
+      </div>`;
+  }
+}
 async function loadShelves(){
-  if(!token){ $('shelfGrid').innerHTML='<div class="panel">请先登录查看书架。</div>'; return; }
+  const grid = $('shelfGrid');
+  if(!grid) return;
+  if(!token){
+    await loadGuestShelfPreview();
+    return;
+  }
+  grid.classList.remove('guest-shelf-grid');
   const data=await api('/ecosystem/shelves');
-  $('shelfGrid').innerHTML=data.shelves.map(s=>`<div class="shelf"><h4>${s.name} <span class="tag">${s.count}</span></h4><div class="mini-list">${s.books.slice(0,6).map(x=>miniItem(x.book)).join('')||'<span class="meta">暂无图书</span>'}</div></div>`).join('');
+  grid.innerHTML=data.shelves.map(s=>`<div class="shelf"><h4>${s.name} <span class="tag">${s.count}</span></h4><div class="mini-list">${s.books.slice(0,6).map(x=>miniItem(x.book)).join('')||'<span class="meta">暂无图书</span>'}</div></div>`).join('');
 }
 function progressText(value){
   const n = Number(value || 0);
@@ -691,15 +714,6 @@ function progressBarHtml(value){
   const n = Math.max(0, Math.min(100, Number(value || 0)));
   return `<span class="history-progress"><i style="width:${n}%"></i></span>`;
 }
-function historyProgressLine(h){
-  const statusText = {want_to_read:'想读', reading:'在读', read:'已读'};
-  const percent = Number(h.progress_percent || 0);
-  const page = Number(h.current_page || 1);
-  const inferredTotal = percent > 0 ? Math.round(page * 100 / percent) : 0;
-  const total = Number(h.total_pages || h.reader_total_pages || inferredTotal || 0);
-  const pageText = total > 0 ? `阅读器第 ${page} / ${total} 页` : `阅读器第 ${page} 页`;
-  return `${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · 读到 ${progressText(percent)} · ${pageText} · ${formatReadAt(h.read_at)}`;
-}
 async function continueReading(bookId, currentPage=1){
   openReader(bookId, currentPage || 1);
 }
@@ -709,10 +723,11 @@ async function loadHistory(){
     return;
   }
   const data = await api('/user/history').catch(()=>({items:[]}));
+  const statusText = {want_to_read:'想读', reading:'在读', read:'已读'};
   $('historyList').innerHTML = (data.items||[]).slice(0,12).map(h=>{
     const percent = Number(h.progress_percent || 0);
     const page = Number(h.current_page || 1);
-    return `<div class="mini-item history-item" onclick="openDetail(${h.book.id})"><div class="history-main"><b>${h.book.title}</b><br><span>${historyProgressLine(h)}</span>${progressBarHtml(percent)}</div><button onclick="event.stopPropagation();continueReading(${h.book.id}, ${page})">继续阅读</button></div>`;
+    return `<div class="mini-item history-item" onclick="openDetail(${h.book.id})"><div class="history-main"><b>${h.book.title}</b><br><span>${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · 已读 ${progressText(percent)} · 第 ${page} 页 · ${formatReadAt(h.read_at)}</span>${progressBarHtml(percent)}</div><button onclick="event.stopPropagation();continueReading(${h.book.id}, ${page})">继续阅读</button></div>`;
   }).join('') || '<span class="meta">暂无阅读历史。</span>';
 }
 async function loadProfile(){
@@ -807,7 +822,7 @@ async function loadProfile(){
     stat('书架数量',stats.shelf_count);
 
   $('tagCloud').innerHTML = (profile.tag_preferences||[])
-    .map(t=>`<span class="cloud" style="--weight:${Math.max(0, Math.min(1, Number(t.weight || 0))).toFixed(3)}">${t.name}</span>`)
+    .map(t=>`<span class="cloud" style="font-size:${12+18*t.weight}px">${t.name}</span>`)
     .join('');
 
   $('profileBooks').innerHTML = (profile.recent_books||[])
@@ -1204,9 +1219,6 @@ function sendChat(){
 window.addEventListener('message', event => {
   const data = event.data || {};
   if(data.type === 'reader-progress-saved'){
-    if(currentAppState?.reader && Number(currentAppState.reader) === Number(data.book_id)){
-      pushAppState({...currentAppState, page:Number(data.current_page || currentAppState.page || 1)}, true);
-    }
     Promise.allSettled([
       loadHistory(),
       loadShelves(),
@@ -1227,13 +1239,11 @@ function openAssistantLegacy(){
 function updateSearchbarForView(view){ if($('topSearchbar')) $('topSearchbar').style.display = ['home','discover'].includes(view) ? 'flex' : 'none'; }
 async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile()]); }
 
-function activateView(view, opts={}){
-  const push = opts.push !== false;
+function activateView(view){
   if(view === 'admin' && !isAdmin()){
     toast('请使用管理员账号登录');
     view = 'home';
   }
-  currentView = view;
   const btn = document.querySelector(`[data-view="${view}"]`);
   document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));
   btn?.classList.add('active');
@@ -1245,28 +1255,6 @@ function activateView(view, opts={}){
   if(view==='shelf') loadShelves();
   if(view==='profile') loadProfile();
   if(view==='admin') loadAdmin();
-  if(push) pushAppState({view});
-}
-
-async function applyAppState(state){
-  applyingHistoryState = true;
-  const next = state || {view:'home'};
-  currentAppState = {...next};
-  hideReaderModal();
-  if(next.view) activateView(next.view, {push:false});
-  if(next.detail){
-    try{
-      if(!activeBook || activeBook.id !== next.detail) await openDetail(next.detail, {push:false});
-      else $('detailModal').classList.remove('hidden');
-    }catch(e){ toast(e.message || '详情打开失败'); }
-  }else{
-    hideDetailModal();
-  }
-  if(next.reader){
-    try{ await openReader(next.reader, next.page || 1, {push:false}); }
-    catch(e){ toast(e.message || '阅读器打开失败'); }
-  }
-  applyingHistoryState = false;
 }
 
 document.querySelectorAll('.nav[data-view]').forEach(btn=>{
@@ -1282,9 +1270,4 @@ $('logoutBtn').onclick=()=>{ logout(); };
 $('searchBtn').onclick=()=>{ searchByKeyword($('globalSearch').value); };
 $('globalSearch').addEventListener('keydown', e=>{ if(e.key==='Enter') $('searchBtn').click(); });
 renderChatMessages();
-window.addEventListener('popstate', e => {
-  applyAppState(e.state || {view:'home'});
-});
-const initialParams = new URLSearchParams(location.search);
-pushAppState({view:'home'}, true);
-updateUserBadge(); updateSearchbarForView('home'); loadAll(); openReaderFromUrl(initialParams);
+updateUserBadge(); updateSearchbarForView('home'); loadAll();
