@@ -1,22 +1,19 @@
-from __future__ import annotations
+# save_json.py
 
 import json
-from pathlib import Path
-from typing import Any
 
 
-def save_books_json(books: list[dict[str, Any]], output: str = "data/books.json") -> str:
-    out = Path(output)
-    out.parent.mkdir(parents=True, exist_ok=True)
+def save_book(book, file_path):
 
-    seen: set[str] = set()
-    unique: list[dict[str, Any]] = []
-    for book in books:
-        key = (book.get("isbn") or book.get("source_url") or book.get("title") or "").strip()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        unique.append(book)
+    with open(
+        file_path,
+        "w",
+        encoding="utf-8"
+    ) as f:
 
-    out.write_text(json.dumps(unique, ensure_ascii=False, indent=2), encoding="utf-8")
-    return str(out)
+        json.dump(
+            book,
+            f,
+            ensure_ascii=False,
+            indent=4
+        )

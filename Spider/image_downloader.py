@@ -1,38 +1,58 @@
-from __future__ import annotations
+import os
 
-import hashlib
-from pathlib import Path
-from urllib.parse import urlparse
-
-import httpx
+from login import session
+from headers import HEADERS
 
 
-def download_image(url: str | None, out_dir: str = "frontend/assets/covers") -> str | None:
-    """下载封面图并返回可被前端访问的相对路径。
+class ImageDownloader:
 
-    若下载失败，返回 None，不中断图书导入流程。
-    """
-    if not url:
-        return None
+    @staticmethod
+    def download(
+            image_url,
+            isbn
+    ):
 
-    path = urlparse(url).path
-    ext = Path(path).suffix.lower()
-    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
-        ext = ".jpg"
+        if not image_url:
+            return None
 
-    digest = hashlib.md5(url.encode("utf-8")).hexdigest()[:16]
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    file_path = out / f"{digest}{ext}"
+        if not isbn:
+            return None
 
-    if file_path.exists():
-        return "/" + str(file_path).replace("\\", "/")
+        os.makedirs(
+            "images",
+            exist_ok=True
+        )
 
-    try:
-        with httpx.Client(timeout=20, follow_redirects=True) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            file_path.write_bytes(resp.content)
-        return "/" + str(file_path).replace("\\", "/")
-    except Exception:
-        return None
+        filename = (
+            f"images/{isbn}.jpg"
+        )
+
+        try:
+
+            response = session.get(
+
+                image_url,
+
+                headers=HEADERS,
+
+                timeout=20
+
+            )
+
+            if response.status_code != 200:
+                return None
+
+            with open(
+                    filename,
+                    "wb"
+            ) as f:
+
+                f.write(
+                    response.content
+                )
+
+            return filename
+
+        except Exception:
+
+            return None

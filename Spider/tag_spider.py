@@ -1,41 +1,76 @@
-from __future__ import annotations
+# tag_spider.py
 
-import time
-from urllib.parse import quote
+from login import session
 
-import httpx
 from bs4 import BeautifulSoup
 
-DEFAULT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-    )
-}
+from headers import HEADERS
+
+import re
+
+from utils import is_book_url
 
 
-class DoubanTagSpider:
-    """按豆瓣标签页采集图书详情页链接。
+class TagSpider:
 
-    该爬虫仅用于离线准备种子数据；请控制 pages/delay，遵守目标站点 robots 和访问频率。
-    """
+    @staticmethod
+    def get_book_urls(tag, max_page):
 
-    def __init__(self, delay: float = 1.5, timeout: float = 15.0):
-        self.delay = delay
-        self.timeout = timeout
+        urls = set()
 
-    def fetch_book_urls(self, tag: str, pages: int = 1, page_size: int = 20) -> list[str]:
-        urls: list[str] = []
-        with httpx.Client(headers=DEFAULT_HEADERS, timeout=self.timeout, follow_redirects=True) as client:
-            for page in range(pages):
-                start = page * page_size
-                url = f"https://book.douban.com/tag/{quote(tag)}?start={start}&type=T"
-                resp = client.get(url)
-                resp.raise_for_status()
-                soup = BeautifulSoup(resp.text, "lxml")
-                for a in soup.select("a[href*='/subject/']"):
-                    href = a.get("href", "")
-                    if "/subject/" in href and href.startswith("https://book.douban.com/subject/"):
-                        urls.append(href.split("?")[0])
-                time.sleep(self.delay)
-        return sorted(set(urls))
+        for page in range(max_page):
+
+            start = page * 20
+
+            url = (
+                f"https://book.douban.com/tag/"
+                f"{tag}?start={start}"
+            )
+
+            print(
+                f"采集标签页：{url}"
+            )
+
+            try:
+
+                html = session.get(
+                    url,
+                    headers=HEADERS,
+                    timeout=10
+                ).text
+
+                soup = BeautifulSoup(
+                    html,
+                    "lxml"
+                )
+
+                for a in soup.find_all("a"):
+
+                    href = a.get("href")
+
+                    if not href:
+                        continue
+
+                    href = href.split("?")[0]
+
+                    if is_book_url(href):
+                        urls.add(href)
+
+                    if re.match(
+                            r"^https://book\.douban\.com/subject/\d+/?$",
+                            href
+                    ):
+
+                        urls.add(href)
+
+                    else:
+
+                        print(
+                            f"过滤链接: {href}"
+                        )
+
+            except Exception as e:
+
+                print(e)
+
+        return list(urls)
