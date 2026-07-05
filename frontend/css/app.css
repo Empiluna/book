@@ -1309,3 +1309,64 @@
   margin:0 !important;
   padding:0 12px !important;
 }
+/* 个人画像：兴趣标签 UI 修正 */
+#tagCloud {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  margin: 12px 0 18px !important;
+}
+
+/* 兼容 tagCloud 里不同写法：span / button / .tag / .chip */
+#tagCloud span,
+#tagCloud button,
+#tagCloud .tag,
+#tagCloud .chip,
+#tagCloud .interest-tag,
+#tagCloud .tag-pill {
+  min-width: 64px !important;
+  height: 48px !important;
+  padding: 0 18px !important;
+  border-radius: 999px !important;
+
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+
+  color: #17202a !important;
+  background: linear-gradient(135deg, rgba(124, 58, 237, .12), rgba(14, 165, 233, .12)) !important;
+  border: 1px solid rgba(124, 58, 237, .08) !important;
+
+  transform: none !important;
+}
+
+/* 防止第一个标签被单独放大 */
+#tagCloud span:first-child,
+#tagCloud button:first-child,
+#tagCloud .tag:first-child,
+#tagCloud .chip:first-child,
+#tagCloud .interest-tag:first-child,
+#tagCloud .tag-pill:first-child {
+  font-size: 16px !important;
+  min-width: 64px !important;
+  height: 48px !important;
+  padding: 0 18px !important;
+  transform: none !important;
+}
+
+/* 鼠标悬停效果 */
+#tagCloud span:hover,
+#tagCloud button:hover,
+#tagCloud .tag:hover,
+#tagCloud .chip:hover,
+#tagCloud .interest-tag:hover,
+#tagCloud .tag-pill:hover {
+  color: #6d28d9 !important;
+  background: rgba(124, 58, 237, .16) !important;
+}
