@@ -974,7 +974,15 @@ class GraphService:
 
         if user:
             profile = build_user_profile(self.db, user)
-            seed_ids = [int(x) for x in (profile.get("interest_seed_book_ids") or profile.get("high_rated_book_ids") or []) if x]
+            recent_ids = []
+            for item in profile.get("recent_books") or []:
+                bid = item.get("book_id") or item.get("id")
+                if bid:
+                    recent_ids.append(int(bid))
+
+            interest_ids = [int(x) for x in (profile.get("interest_seed_book_ids") or []) if x]
+            high_ids = [int(x) for x in (profile.get("high_rated_book_ids") or []) if x]
+            seed_ids = list(dict.fromkeys(recent_ids[:5] + interest_ids[:6] + high_ids[:4]))
             tag_preferences = profile.get("tag_preferences") or []
             favorite_authors = profile.get("favorite_authors") or []
             favorite_categories = profile.get("favorite_categories") or []
@@ -1049,16 +1057,25 @@ class GraphService:
         seed_texts = {b.id: book_text(b) for b in seed_books}
         for c in cluster_defs:
             keys = [k.lower() for k in c["keywords"]]
+            strong_keys = [k.lower() for k in c.get("strong_keywords", [])]
             for b in seed_books:
                 txt = seed_texts[b.id]
-                hit_count = sum(1 for k in keys if k in txt)
-                if hit_count:
-                    cluster_scores[c["key"]] += 1.0 + min(hit_count, 3) * 0.25
+                strong_hit_count = sum(1 for k in strong_keys if k in txt)
+                weak_hit_count = sum(1 for k in keys if k in txt)
+                if strong_hit_count:
+                    cluster_scores[c["key"]] += 1.4 + min(strong_hit_count, 3) * 0.45
                     if b.title not in cluster_evidence[c["key"]]:
                         cluster_evidence[c["key"]].append(b.title)
-            pref_hit = sum(1 for k in keys if k in pref_blob)
-            if pref_hit:
-                cluster_scores[c["key"]] += 0.8 + min(pref_hit, 3) * 0.2
+                elif weak_hit_count >= 2:
+                    cluster_scores[c["key"]] += 0.45
+                    if b.title not in cluster_evidence[c["key"]]:
+                        cluster_evidence[c["key"]].append(b.title)
+            pref_strong_hit = sum(1 for k in strong_keys if k in pref_blob)
+            pref_weak_hit = sum(1 for k in keys if k in pref_blob)
+            if pref_strong_hit:
+                cluster_scores[c["key"]] += 0.9 + min(pref_strong_hit, 3) * 0.25
+            elif pref_weak_hit >= 2:
+                cluster_scores[c["key"]] += 0.35
 
         active_clusters = [c for c in cluster_defs if cluster_scores[c["key"]] > 0]
         if not active_clusters:
@@ -1093,17 +1110,22 @@ class GraphService:
                 # Strong terms define the cluster.  Weak terms such as "文明" or "未来"
                 # help explanation, but should not push unrelated books ahead of truly
                 # matching books like 科幻/算法/文学 categories.
-                score = len(strong_hits) * 2.2 + len(hits) * 0.35 + float(b.avg_rating or 0) / 10.0 + float(b.hot_score or 0) / 120.0
+                if not strong_hits and len(hits) < 2:
+                    continue
+                if c["key"] in {"ai_tech", "business_mind", "science_fiction"} and not strong_hits:
+                    continue
+
+                score = (
+                    len(strong_hits) * 2.6
+                    + len(hits) * 0.25
+                    + float(b.avg_rating or 0) / 10.0
+                    + float(b.hot_score or 0) / 150.0
+                )
                 recs.append((score, b, (strong_hits or hits)[:3]))
             recs.sort(key=lambda x: x[0], reverse=True)
 
-            # If a cluster has no strict lexical match, use non-seed hot books as exploration fallback.
             if not recs:
-                for b in all_books:
-                    if b.id not in seen_seed and b.id not in used_rec_ids:
-                        recs.append((float(b.hot_score or 0) / 100.0, b, ["探索推荐"]))
-                    if len(recs) >= 2:
-                        break
+                continue
 
             chosen = recs[:2]
             cluster_rec_titles: list[str] = []

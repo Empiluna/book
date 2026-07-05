@@ -8,6 +8,7 @@ let readerStartAt = null;
 let readerBookId = null;
 let graphBookOptions = [];
 let graphBookOptionsLoaded = false;
+let currentGraphData = null;
 
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
 async function api(path, opts={}){
@@ -41,6 +42,7 @@ function logout(){
   updateUserBadge(); toast('已退出登录'); loadAll();
 }
 function attr(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function jsString(value){ return String(value ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'\\r'); }
 function stat(label, value){ return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
 function isInShelf(bookId, shelf){ return !!(shelfState[bookId] && shelfState[bookId][shelf]); }
 function shelfStatus(shelf){ return shelf === '在读' ? 'reading' : shelf === '已读' ? 'read' : 'want_to_read'; }
@@ -505,13 +507,96 @@ async function loadGraph(){
   renderGraph(data);
   const summary = data.semantic_summary || {};
   const semanticHtml = Object.keys(summary).length ? `<div class="graph-side-card"><h4>${mode==='profile'?'画像摘要':'语义画像'}</h4>${Object.entries(summary).map(([k,v])=>`<p><b>${graphTypeLabel(k)}：</b>${(v||[]).slice(0,6).join('、') || '暂无'}</p>`).join('')}</div>` : '';
-  $('graphInfo').innerHTML = `<div class="graph-side-card"><h4>图例说明</h4>${graphLegendHtml()}</div>` + graphExplainHtml(data) + semanticHtml + pathCardsHtml(data) + `<div class="graph-side-card"><h4>运行状态</h4><p>图谱后端：${data.backend}</p><p>节点 ${data.nodes.length} · 关系 ${data.edges.length}${data.trimmed?' · 已限制节点数量':''}</p></div>`;
+  $('graphInfo').innerHTML = `<div class="graph-side-card"><h4>图例说明</h4>${graphLegendHtml()}</div>` + graphExplainHtml(data) + semanticHtml + pathCardsHtml(data);
 }
-function distributeYs(count, top=90, bottom=630){
+function distributeYs(count, top=90, bottom=760){
   if(count <= 0) return [];
   if(count === 1) return [(top+bottom)/2];
+
   const step = (bottom-top)/(count-1);
   return Array.from({length:count}, (_,i)=>top+i*step);
+}
+
+function graphCurvePath(a, b){
+  const dx = Math.max(80, Math.abs(b.x - a.x));
+  const c1x = a.x + dx * 0.42;
+  const c2x = b.x - dx * 0.42;
+  return `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`;
+}
+function graphNodeBookId(n){
+  if(!n) return null;
+
+  if(n.book_id !== undefined && n.book_id !== null && n.book_id !== ''){
+    return Number(n.book_id);
+  }
+
+  const rawId = String(n.id || '');
+  const match = rawId.match(/^(Book|SeedBook|RecBook):(\d+)$/);
+  if(match) return Number(match[2]);
+
+  return null;
+}
+function openGraphBookNode(event, bookId){
+  event?.stopPropagation?.();
+
+  if(!bookId || Number.isNaN(Number(bookId))){
+    toast('该节点不是图书节点，暂无详情页可跳转');
+    return;
+  }
+
+  openDetail(Number(bookId));
+}
+function showGraphNodeInfo(nodeId){
+  if(!currentGraphData) return;
+
+  const node = (currentGraphData.nodes || []).find(n => String(n.id) === String(nodeId));
+  if(!node) return;
+
+  const relatedEdges = (currentGraphData.edges || []).filter(e =>
+    String(e.source) === String(nodeId) || String(e.target) === String(nodeId)
+  );
+  const relatedNodeIds = new Set();
+  relatedEdges.forEach(e => {
+    relatedNodeIds.add(String(e.source));
+    relatedNodeIds.add(String(e.target));
+  });
+
+  const relatedNodes = (currentGraphData.nodes || [])
+    .filter(n => relatedNodeIds.has(String(n.id)) && String(n.id) !== String(nodeId))
+    .slice(0, 8);
+
+  const html = `
+    <div class="graph-side-card graph-node-focus-card">
+      <h4>当前节点</h4>
+      <p><b>名称：</b>${attr(node.label || '未命名节点')}</p>
+      <p><b>类型：</b>${graphTypeLabel(node.type)}</p>
+      <p><b>关联数：</b>${relatedEdges.length}</p>
+      ${
+        relatedNodes.length
+          ? `<p><b>相关节点：</b>${relatedNodes.map(n => attr(n.label || '')).join('、')}</p>`
+          : `<p class="meta">暂无直接关联节点</p>`
+      }
+    </div>
+  `;
+
+  const info = $('graphInfo');
+  if(info){
+    const old = info.querySelector('.graph-node-focus-card');
+    if(old) old.remove();
+    info.insertAdjacentHTML('afterbegin', html);
+  }
+
+  document.querySelectorAll('#graphSvg .node').forEach(el => {
+    const id = el.getAttribute('data-node-id');
+    el.classList.toggle('is-focus-node', String(id) === String(nodeId));
+    el.classList.toggle('is-related-node', relatedNodeIds.has(String(id)) && String(id) !== String(nodeId));
+  });
+
+  document.querySelectorAll('#graphSvg .edge').forEach(el => {
+    const source = el.getAttribute('data-source');
+    const target = el.getAttribute('data-target');
+    el.classList.toggle('is-focus-edge', String(source) === String(nodeId) || String(target) === String(nodeId));
+  });
 }
 function nodeLayer(n, centerId){
   if(n.id === centerId || n.type === 'Profile') return 'center';
@@ -519,7 +604,8 @@ function nodeLayer(n, centerId){
   if(n.type === 'Book') return 'book';
   return 'semantic';
 }
-function renderGraph(data){
+function renderGraphLegacy(data){
+  currentGraphData = data;
   const nodes = data.nodes || [], edges = data.edges || [];
   const svg=$('graphSvg');
   const W=1280,H=820;
@@ -548,19 +634,159 @@ function renderGraph(data){
   // 这样可以避免高分图书图谱、画像图谱中横线标签压住节点和标题。
   const line=edges.map(e=>{
     const a=pos[e.source],b=pos[e.target]; if(!a||!b)return'';
-    return `<g><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="rgba(71,85,105,.34)" stroke-width="${1.0+Math.min(e.weight||1,1.5)*.8}" marker-end="url(#arrow)"/></g>`;
+    return `<g class="edge" data-source="${attr(e.source)}" data-target="${attr(e.target)}"><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="rgba(71,85,105,.30)" stroke-width="${1.0+Math.min(e.weight||1,1.5)*.8}" marker-end="url(#arrow)"/></g>`;
   }).join('');
   const ns=nodes.map(n=>{
-    const p=pos[n.id]; if(!p)return'';
+    const p=pos[n.id];
+    if(!p) return '';
+
     const color=graphColor(n.type);
     const layer=nodeLayer(n, centerNode.id);
     const radius=layer==='center'?42:(n.type==='SeedBook'?28:(n.type==='Book'?27:24));
     const raw = String(n.label||'');
     const label = layer==='center' ? raw.slice(0,12) : raw.slice(0,13);
     const labelY = p.y + radius + 20;
-    return `<g class="node" data-title="${attr(raw)}"><circle cx="${p.x}" cy="${p.y}" r="${radius}" fill="${color}" opacity=".94"/><text class="node-type" x="${p.x}" y="${p.y+4}" text-anchor="middle">${graphTypeLabel(n.type)}</text><text class="node-label" x="${p.x}" y="${labelY}" text-anchor="middle">${label}</text></g>`;
+
+    const bookId = graphNodeBookId(n);
+    const clickable = !!bookId;
+    const clickAttr = clickable ? `onclick="openGraphBookNode(event, ${bookId})"` : `onclick="showGraphNodeInfo('${attr(jsString(n.id))}')"`;
+    const nodeClass = clickable ? 'graph-book-node' : 'graph-semantic-node';
+    const hint = clickable ? '点击查看图书详情' : '语义节点';
+
+    return `
+      <g class="node ${nodeClass}"
+         data-node-id="${attr(n.id)}"
+         data-title="${attr(raw)}"
+         ${clickAttr}>
+        <title>${attr(raw)} · ${attr(graphTypeLabel(n.type))} · ${hint}</title>
+        <circle cx="${p.x}" cy="${p.y}" r="${radius}" fill="${color}" opacity=".94"/>
+        <text class="node-type" x="${p.x}" y="${p.y+4}" text-anchor="middle">${graphTypeLabel(n.type)}</text>
+        <text class="node-label" x="${p.x}" y="${labelY}" text-anchor="middle">${attr(label)}</text>
+        ${clickable ? `<text class="node-click-hint" x="${p.x}" y="${labelY + 17}" text-anchor="middle">点击查看</text>` : ''}
+      </g>`;
   }).join('');
   svg.innerHTML=`<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(71,85,105,.38)"/></marker></defs>${line}${ns}`;
+}
+
+function renderGraph(data){
+  currentGraphData = data;
+  const nodes = data.nodes || [], edges = data.edges || [];
+  const svg = $('graphSvg');
+  const W = 1500, H = 900;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  if(!nodes.length){
+    svg.innerHTML='<text x="750" y="430" text-anchor="middle" class="node-label">暂无图谱数据</text>';
+    return;
+  }
+
+  const centerId = data.center || nodes.find(n=>n.type==='Profile')?.id || nodes.find(n=>n.type==='Book')?.id || nodes[0].id;
+  const centerNode = nodes.find(n=>n.id===centerId) || nodes[0];
+  const pos = {};
+  pos[centerNode.id] = {x:190, y:H/2};
+
+  const seedLayer = nodes.filter(n => n.id !== centerNode.id && n.type === 'SeedBook');
+  const semanticLayer = nodes.filter(n => n.id !== centerNode.id && !['Book','SeedBook','Profile'].includes(n.type));
+  const bookLayer = nodes.filter(n => n.id !== centerNode.id && n.type === 'Book');
+
+  const seedXs = seedLayer.length > 5 ? [520, 650] : [610];
+  seedLayer.forEach((n,i)=>{
+    const col = i % seedXs.length;
+    const items = seedLayer.filter((_,j)=>j % seedXs.length === col);
+    const idx = items.indexOf(n);
+    const ys = distributeYs(items.length, 105, 795);
+    pos[n.id] = {x:seedXs[col], y:ys[idx]};
+  });
+
+  const midXs = semanticLayer.length > 9 ? [830, 980] : [900];
+  semanticLayer.forEach((n,i)=>{
+    const col = i % midXs.length;
+    const items = semanticLayer.filter((_,j)=>j % midXs.length === col);
+    const idx = items.indexOf(n);
+    const ys = distributeYs(items.length, 95, 805);
+    pos[n.id] = {x:midXs[col], y:ys[idx]};
+  });
+
+  const bookXs = bookLayer.length > 8 ? [1250, 1390] : [1320];
+  bookLayer.forEach((n,i)=>{
+    const col = i % bookXs.length;
+    const items = bookLayer.filter((_,j)=>j % bookXs.length === col);
+    const idx = items.indexOf(n);
+    const ys = distributeYs(items.length, 100, 800);
+    pos[n.id] = {x:bookXs[col], y:ys[idx]};
+  });
+
+  const line = edges.map(e=>{
+    const a = pos[e.source], b = pos[e.target];
+    if(!a || !b) return '';
+
+    const isMain = String(e.source) === String(centerNode.id) || String(e.target) === String(centerNode.id);
+    const width = isMain ? 2.8 : (1.5 + Math.min(e.weight || 1, 1.5) * .55);
+
+    return `
+      <g class="edge" data-source="${attr(e.source)}" data-target="${attr(e.target)}">
+        <path class="edge-path ${isMain ? 'main-edge' : ''}"
+              d="${graphCurvePath(a,b)}"
+              stroke-width="${width}"
+              marker-end="url(#arrow)"/>
+      </g>`;
+  }).join('');
+
+  const ns = nodes.map(n=>{
+    const p = pos[n.id];
+    if(!p) return '';
+
+    const color = graphColor(n.type);
+    const layer = nodeLayer(n, centerNode.id);
+    const radius =
+      layer === 'center' ? 48 :
+      n.type === 'SeedBook' ? 32 :
+      n.type === 'Book' ? 31 :
+      n.type === 'InterestCluster' ? 32 :
+      27;
+    const raw = String(n.label || '');
+    const label = raw.slice(0, 14);
+    const labelY = p.y + radius + 22;
+
+    const bookId = graphNodeBookId(n);
+    const clickable = !!bookId;
+    const clickAttr = clickable ? `onclick="openGraphBookNode(event, ${bookId})"` : `onclick="showGraphNodeInfo('${attr(jsString(n.id))}')"`;
+    const nodeClass = clickable ? 'graph-book-node' : 'graph-semantic-node';
+    const hint = clickable ? '点击查看图书详情' : '语义节点';
+
+    return `
+      <g class="node ${nodeClass}"
+         data-node-id="${attr(n.id)}"
+         data-title="${attr(raw)}"
+         ${clickAttr}>
+        <title>${attr(raw)} · ${attr(graphTypeLabel(n.type))} · ${hint}</title>
+        <circle class="node-halo" cx="${p.x}" cy="${p.y}" r="${radius + 14}" fill="${color}"/>
+        <circle class="node-core" cx="${p.x}" cy="${p.y}" r="${radius}" fill="${color}" opacity=".96"/>
+        <text class="node-type" x="${p.x}" y="${p.y+4}" text-anchor="middle">${graphTypeLabel(n.type)}</text>
+        <text class="node-label" x="${p.x}" y="${labelY}" text-anchor="middle">${attr(label)}</text>
+        ${clickable ? `<text class="node-click-hint" x="${p.x}" y="${labelY + 18}" text-anchor="middle">点击查看</text>` : ''}
+      </g>`;
+  }).join('');
+
+  svg.innerHTML = `
+    <defs>
+      <pattern id="graphGrid" width="34" height="34" patternUnits="userSpaceOnUse">
+        <path d="M 34 0 L 0 0 0 34" fill="none" stroke="rgba(148,163,184,.18)" stroke-width="1"/>
+      </pattern>
+      <radialGradient id="graphGlow" cx="50%" cy="50%" r="60%">
+        <stop offset="0%" stop-color="rgba(124,58,237,.16)"/>
+        <stop offset="100%" stop-color="rgba(124,58,237,0)"/>
+      </radialGradient>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(100,116,139,.46)"/>
+      </marker>
+    </defs>
+    <rect class="graph-bg-grid" x="0" y="0" width="${W}" height="${H}" fill="url(#graphGrid)"/>
+    <circle cx="260" cy="140" r="210" fill="url(#graphGlow)" opacity=".75"/>
+    <circle cx="1240" cy="180" r="260" fill="url(#graphGlow)" opacity=".48"/>
+    ${line}
+    ${ns}
+  `;
 }
 
 function uniquePreviewBooks(...groups){
