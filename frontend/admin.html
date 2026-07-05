@@ -13,6 +13,18 @@
     .admin-batch-hint{margin:-2px 0 12px;color:#667085;font-size:12px;font-weight:800}
     .admin-table th:first-child,.admin-table td:first-child{width:46px;text-align:center}
     .admin-batchbar .danger-btn{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+
+    .admin-upload-card{margin:12px 0 18px;padding:16px;border:1px solid rgba(124,58,237,.18);border-radius:18px;background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(14,165,233,.06))}
+    .admin-upload-card h3{margin:0 0 6px;font-size:18px}
+    .admin-upload-card .meta{margin:0 0 12px;color:#667085;font-size:13px;line-height:1.6}
+    .admin-upload-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .admin-upload-grid input,.admin-upload-grid textarea{width:100%}
+    .admin-upload-grid textarea{grid-column:span 2;min-height:78px}
+    .admin-upload-grid .wide{grid-column:span 2}
+    .admin-upload-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:900;color:#334155}
+    .admin-upload-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .admin-upload-actions .hint{color:#667085;font-size:12px;font-weight:800}
+    @media(max-width:1100px){.admin-upload-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   </style>
 </head>
 <body>
@@ -91,24 +103,31 @@
             <div class="admin-toolbar">
               <input id="adminBookSearch" placeholder="搜索图书" />
               <button onclick="adminLoadBooks()">搜索</button>
-              <button onclick="adminResetBookForm()">新建</button>
               <button onclick="adminReindex()">重建索引</button>
             </div>
-            <form id="adminBookForm" class="admin-form">
-              <input type="hidden" id="adminBookId" />
-              <input id="adminBookTitle" placeholder="书名" required />
-              <input id="adminBookAuthors" placeholder="作者，多个用逗号分隔" />
-              <input id="adminBookCategory" placeholder="分类" />
-              <input id="adminBookTags" placeholder="标签，多个用逗号分隔" />
-              <input id="adminBookPublisher" placeholder="出版社" />
-              <input id="adminBookYear" type="number" placeholder="出版年份" />
-              <input id="adminBookCover" placeholder="封面 URL" />
-              <textarea id="adminBookDescription" placeholder="简介"></textarea>
-              <div class="admin-form-actions">
-                <button class="primary" type="submit">保存图书</button>
-                <button type="button" onclick="adminResetBookForm()">清空</button>
+            <form id="adminEpubUploadForm" class="admin-upload-card">
+              <h3>上传 EPUB 图书入库</h3>
+              <p class="meta">管理员上传 EPUB 后，系统会自动创建图书记录；用户端可正常搜索、在线阅读、加入书架、评分和评论。</p>
+              <div class="admin-upload-grid">
+                <label class="wide">EPUB 文件<input id="adminUploadEpubFile" type="file" accept=".epub,application/epub+zip" required /></label>
+                <label class="wide">封面图，可选<input id="adminUploadCoverFile" type="file" accept="image/*" /></label>
+                <input id="adminUploadTitle" placeholder="书名，不填则使用文件名" />
+                <input id="adminUploadAuthors" placeholder="作者，多个用逗号分隔" />
+                <input id="adminUploadCategory" placeholder="分类，例如 科幻 / 文学 / 技术" />
+                <input id="adminUploadTags" placeholder="标签，多个用逗号分隔" />
+                <input id="adminUploadPublisher" placeholder="出版社" />
+                <input id="adminUploadYear" type="number" placeholder="出版年份" />
+                <input id="adminUploadIsbn" placeholder="ISBN，可选" />
+                <input id="adminUploadPageCount" type="number" placeholder="页数，默认 240" value="240" />
+                <textarea id="adminUploadDescription" placeholder="简介，可选。会作为图书简介和试读文本兜底。"></textarea>
+              </div>
+              <div class="admin-upload-actions">
+                <button class="primary" type="submit">上传并入库</button>
+                <button type="button" onclick="adminResetEpubUploadForm()">清空上传表单</button>
+                <span class="hint">支持 .epub；上传后会同步搜索索引和知识图谱。</span>
               </div>
             </form>
+
             <div id="adminBookList" class="admin-table"></div>
           </div>
 
