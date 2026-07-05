@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func
+from pathlib import Path
+from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_optional, require_admin
@@ -11,8 +13,6 @@ from app.schemas import BookCreate, BookUpdate
 from app.services.graph_service import GraphService
 from app.services.search_service import SearchService
 from app.services.serializers import book_card
-from app.utils.categories import primary_category
-from app.utils.search_terms import is_valid_search_keyword
 
 router = APIRouter(prefix="/books", tags=["公共 · 图书搜索与详情"])
 
@@ -32,8 +32,6 @@ def _apply_book_payload(db: Session, book: Book, payload: BookCreate | BookUpdat
     tags = data.pop("tags", None)
     publisher = data.pop("publisher", None)
     series = data.pop("series", None)
-    if "category" in data:
-        data["category"] = primary_category(data.get("category"))
     for k, v in data.items():
         setattr(book, k, v)
     if publisher is not None:
@@ -54,7 +52,7 @@ def _apply_book_payload(db: Session, book: Book, payload: BookCreate | BookUpdat
 @router.get("/meta/options")
 def book_options(db: Session = Depends(get_db)):
     books = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
-    cats = sorted({primary_category(b.category) for b in books if primary_category(b.category)})
+    cats = sorted({b.category for b in books if b.category})
     tags = sorted({t.name for b in books for t in b.tags})
     authors = sorted({a.name for b in books for a in b.authors})
     publishers = sorted({b.publisher.name for b in books if b.publisher})
@@ -86,15 +84,11 @@ def hot_searches(limit: int = Query(10, ge=1, le=30), db: Session = Depends(get_
         .filter(SearchLog.keyword != "")
         .group_by(SearchLog.keyword)
         .order_by(func.count(SearchLog.id).desc(), func.max(SearchLog.created_at).desc())
-        .limit(limit * 3)
+        .limit(limit)
         .all()
     )
     defaults = ["三体", "人工智能", "科幻", "Python", "历史", "机器学习", "文学", "经济"]
-    items = [
-        {"keyword": r.keyword, "count": int(r.count or 0), "last_at": r.last_at.isoformat() if r.last_at else None}
-        for r in rows
-        if is_valid_search_keyword(r.keyword)
-    ][:limit]
+    items = [{"keyword": r.keyword, "count": int(r.count or 0), "last_at": r.last_at.isoformat() if r.last_at else None} for r in rows]
     existing = {x["keyword"] for x in items}
     for keyword in defaults:
         if len(items) >= limit:
@@ -115,6 +109,105 @@ def book_detail(book_id: int, db: Session = Depends(get_db)):
     data = book_card(book)
     data["graph_relations"] = GraphService(db).subgraph(book_id, depth=1)
     return data
+
+
+
+ROOT = Path(__file__).resolve().parents[4]
+BOOK_UPLOAD_DIR = ROOT / "data" / "book_uploads"
+EPUB_UPLOAD_DIR = BOOK_UPLOAD_DIR / "epubs"
+COVER_UPLOAD_DIR = BOOK_UPLOAD_DIR / "covers"
+ALLOWED_COVER_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+
+def _safe_file_url(directory: Path, filename: str) -> str:
+    # StaticFiles already mounts ROOT/data as /data in app.main.
+    relative = directory.relative_to(ROOT / "data") / filename
+    return "/data/" + "/".join(relative.parts)
+
+
+async def _save_upload(upload: UploadFile, directory: Path, allowed_exts: set[str], prefix: str) -> tuple[str, str]:
+    original = upload.filename or "upload"
+    ext = Path(original).suffix.lower()
+    if ext not in allowed_exts:
+        raise HTTPException(400, f"文件格式不支持：{ext or '无扩展名'}")
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = f"{prefix}_{uuid4().hex[:12]}{ext}"
+    target = directory / filename
+    content = await upload.read()
+    if not content:
+        raise HTTPException(400, "上传文件为空")
+    target.write_bytes(content)
+    return filename, _safe_file_url(directory, filename)
+
+
+def _split_admin_values(value: str | None) -> list[str]:
+    if not value:
+        return []
+    import re
+    return [x.strip() for x in re.split(r"[,，、;；]", value) if x.strip()]
+
+
+@router.post("/admin/upload-epub")
+async def upload_epub_book(
+    file: UploadFile = File(...),
+    cover: UploadFile | None = File(None),
+    title: str | None = Form(None),
+    authors: str | None = Form(None),
+    category: str | None = Form(None),
+    tags: str | None = Form(None),
+    publisher: str | None = Form(None),
+    publication_year: int | None = Form(None),
+    isbn: str | None = Form(None),
+    page_count: int | None = Form(240),
+    description: str | None = Form(None),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """管理员上传 EPUB 并直接入库。
+
+    上传成功后会创建 books 记录，并填写 ebook_epub_url。
+    前台详情、在线阅读、评分、评论、书架、推荐和搜索都会把它当普通图书使用。
+    """
+    if isbn and db.query(Book).filter(Book.isbn == isbn).first():
+        raise HTTPException(400, "该 ISBN 的图书已存在")
+
+    epub_filename, epub_url = await _save_upload(file, EPUB_UPLOAD_DIR, {".epub"}, "book")
+    cover_url = None
+    if cover and cover.filename:
+        _, cover_url = await _save_upload(cover, COVER_UPLOAD_DIR, ALLOWED_COVER_EXTS, "cover")
+
+    base_title = (title or "").strip() or Path(file.filename or epub_filename).stem
+    book = Book(
+        title=base_title,
+        isbn=(isbn or None),
+        category=(category or None),
+        publication_year=publication_year,
+        description=(description or f"《{base_title}》由管理员上传 EPUB 资源生成。"),
+        trial_text=(description or None),
+        ebook_epub_url=epub_url,
+        cover_url=cover_url,
+        page_count=page_count or 240,
+        is_new=True,
+        hot_score=0.0,
+    )
+    if publisher:
+        book.publisher = _get_or_create(db, Publisher, publisher.strip())
+    author_list = _split_admin_values(authors) or ["未知作者"]
+    book.authors = [_get_or_create(db, Author, name) for name in author_list]
+    book.tags = [_get_or_create(db, Tag, name) for name in _split_admin_values(tags)]
+
+    db.add(book)
+    db.commit()
+    db.refresh(book)
+
+    SearchService(db).index_book(book)
+    GraphService(db).sync_from_mysql()
+    return {
+        "message": "EPUB 图书上传成功，已入库并同步搜索/图谱",
+        "book": book_card(book),
+        "epub_url": epub_url,
+        "cover_url": cover_url,
+    }
 
 
 @router.post("/admin")
