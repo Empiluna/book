@@ -6,6 +6,7 @@ let lastAdminGraphStats = null;
 
 function $(id){ return document.getElementById(id); }
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
+function uploadHeaders(){ return token ? {'Authorization': `Bearer ${token}`} : {}; }
 function isAdmin(){ return !!(currentUser && currentUser.is_admin); }
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),2600); }
 function attr(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -274,47 +275,54 @@ async function adminLoadBooks(){
   const q = $('adminBookSearch')?.value?.trim();
   const data = await api(q ? `/books?q=${encodeURIComponent(q)}&limit=80` : '/books/admin/export-json').catch(e=>({items:[], error:e.message}));
   if(data.error){ $('adminBookList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
-  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>`<tr><td>${b.id}</td><td>${b.title}</td><td>${(b.authors||[]).join('、')}</td><td>${b.category||''}</td><td>${b.avg_rating||0}</td><td><button onclick="adminEditBook(${b.id})">编辑</button><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无图书</td></tr>'}</tbody></table>`;
+  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>资源</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>{ const resource = b.ebook_epub_url ? 'EPUB' : (b.ebook_pdf_url ? 'PDF' : '文本'); return `<tr><td>${b.id}</td><td>${html(b.title)}</td><td>${html((b.authors||[]).join('、'))}</td><td>${html(b.category||'')}</td><td><span class="status-ok">${resource}</span></td><td>${b.avg_rating||0}</td><td><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>` }).join('') || '<tr><td colspan="7">暂无图书</td></tr>'}</tbody></table>`;
 }
 
-async function adminEditBook(id){
-  const b = await api(`/books/${id}`);
-  $('adminBookId').value = b.id;
-  $('adminBookTitle').value = b.title || '';
-  $('adminBookAuthors').value = (b.authors||[]).join('，');
-  $('adminBookCategory').value = b.category || '';
-  $('adminBookTags').value = (b.tags||[]).join('，');
-  $('adminBookPublisher').value = b.publisher || '';
-  $('adminBookYear').value = b.publication_year || '';
-  $('adminBookCover').value = b.cover_url && !String(b.cover_url).startsWith('data:') ? b.cover_url : '';
-  $('adminBookDescription').value = b.description || '';
-  adminSwitchTab('books');
+function adminResetBookForm(){ /* 旧的手动图书表单已删除，仅保留 EPUB 上传入库。 */ }
+
+function adminResetEpubUploadForm(){
+  $('adminEpubUploadForm')?.reset();
+  if($('adminUploadPageCount')) $('adminUploadPageCount').value = '240';
 }
 
-function adminResetBookForm(){ $('adminBookForm')?.reset(); if($('adminBookId')) $('adminBookId').value=''; }
-function adminBookPayload(){
-  const year = Number($('adminBookYear').value);
-  return {
-    title: $('adminBookTitle').value.trim(),
-    authors: adminSplit($('adminBookAuthors').value),
-    category: $('adminBookCategory').value.trim() || null,
-    tags: adminSplit($('adminBookTags').value),
-    publisher: $('adminBookPublisher').value.trim() || null,
-    publication_year: year || null,
-    cover_url: $('adminBookCover').value.trim() || null,
-    description: $('adminBookDescription').value.trim() || null,
-  };
-}
-
-async function adminSaveBook(event){
+async function adminUploadEpubBook(event){
   event?.preventDefault?.();
-  const id = $('adminBookId').value;
-  const payload = adminBookPayload();
-  if(!payload.title) return toast('请填写书名');
-  await api(id ? `/books/admin/${id}` : '/books/admin', {method:id?'PUT':'POST', body:JSON.stringify(payload)});
-  toast('图书已保存');
-  adminResetBookForm();
-  await adminLoadBooks();
+  if(!isAdmin()) return toast('请先使用管理员账号登录');
+  const file = $('adminUploadEpubFile')?.files?.[0];
+  if(!file) return toast('请选择 EPUB 文件');
+  if(!/\.epub$/i.test(file.name)) return toast('只支持上传 .epub 文件');
+
+  const fd = new FormData();
+  fd.append('file', file);
+  const cover = $('adminUploadCoverFile')?.files?.[0];
+  if(cover) fd.append('cover', cover);
+  const fields = {
+    title: $('adminUploadTitle')?.value?.trim(),
+    authors: $('adminUploadAuthors')?.value?.trim(),
+    category: $('adminUploadCategory')?.value?.trim(),
+    tags: $('adminUploadTags')?.value?.trim(),
+    publisher: $('adminUploadPublisher')?.value?.trim(),
+    publication_year: $('adminUploadYear')?.value?.trim(),
+    isbn: $('adminUploadIsbn')?.value?.trim(),
+    page_count: $('adminUploadPageCount')?.value?.trim(),
+    description: $('adminUploadDescription')?.value?.trim(),
+  };
+  Object.entries(fields).forEach(([k,v])=>{ if(v) fd.append(k, v); });
+
+  const btn = event?.submitter || $('adminEpubUploadForm')?.querySelector('button[type="submit"]');
+  if(btn){ btn.disabled = true; btn.textContent = '上传中...'; }
+  try{
+    const res = await fetch(API + '/books/admin/upload-epub', {method:'POST', headers:uploadHeaders(), body:fd});
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.detail || data.message || '上传失败');
+    toast(data.message || 'EPUB 图书已入库');
+    adminResetEpubUploadForm();
+    await Promise.allSettled([adminLoadBooks(), loadAdmin()]);
+  }catch(e){
+    toast(e.message || '上传失败');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '上传并入库'; }
+  }
 }
 
 async function adminDeleteBook(id, title){
@@ -450,7 +458,7 @@ async function adminRunCypher(){
 }
 
 document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click',()=>adminSwitchTab(btn.dataset.adminTab)));
-$('adminBookForm')?.addEventListener('submit', adminSaveBook);
+$('adminEpubUploadForm')?.addEventListener('submit', adminUploadEpubBook);
 $('adminLoginBtn').onclick = adminLogin;
 $('logoutBtn').onclick = logout;
 $('adminAssistantBtn').onclick = openAdminAssistant;
