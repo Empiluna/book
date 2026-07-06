@@ -315,3 +315,41 @@ class SystemConfig(Base):
     value: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(String(256), default=None)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
+class BookImportBatch(Base):
+    __tablename__ = "book_import_batches"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch_no: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True, default=None)
+    status: Mapped[str] = mapped_column(String(32), default="staged")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    items = relationship("BookImportItem", back_populates="batch", cascade="all, delete-orphan")
+
+
+class BookImportItem(Base):
+    __tablename__ = "book_import_items"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("book_import_batches.id", ondelete="CASCADE"), index=True)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_epub_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    final_epub_url: Mapped[str | None] = mapped_column(String(512), default=None)
+    title: Mapped[str | None] = mapped_column(String(256), default=None)
+    authors_text: Mapped[str | None] = mapped_column(String(512), default=None)
+    category: Mapped[str | None] = mapped_column(String(64), default=None)
+    tags_text: Mapped[str | None] = mapped_column(String(512), default=None)
+    publisher: Mapped[str | None] = mapped_column(String(128), default=None)
+    publication_year: Mapped[int | None] = mapped_column(Integer, default=None)
+    isbn: Mapped[str | None] = mapped_column(String(32), default=None)
+    page_count: Mapped[int] = mapped_column(Integer, default=240)
+    cover_url: Mapped[str | None] = mapped_column(String(2048), default=None)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    status: Mapped[str] = mapped_column(String(32), default="pending")  # pending / edited / committed / failed
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    book_id: Mapped[int | None] = mapped_column(ForeignKey("books.id"), index=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    batch = relationship("BookImportBatch", back_populates="items")
+    book = relationship("Book")
