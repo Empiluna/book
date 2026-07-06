@@ -437,7 +437,7 @@ function renderGraphLocked(){
       </div>
 
       <div class="graph-locked-content">
-        <div class="graph-locked-icon">KG</div>
+        <div class="graph-locked-icon">知</div>
         <h3>登录后查看你的画像图谱</h3>
         <p>
           知识图谱会根据你的阅读历史、收藏、评分、搜索关键词和兴趣标签，
@@ -507,7 +507,7 @@ async function loadGraph(){
   renderGraph(data);
   const summary = data.semantic_summary || {};
   const semanticHtml = Object.keys(summary).length ? `<div class="graph-side-card"><h4>${mode==='profile'?'画像摘要':'语义画像'}</h4>${Object.entries(summary).map(([k,v])=>`<p><b>${graphTypeLabel(k)}：</b>${(v||[]).slice(0,6).join('、') || '暂无'}</p>`).join('')}</div>` : '';
-  $('graphInfo').innerHTML = `<div class="graph-side-card"><h4>图例说明</h4>${graphLegendHtml()}</div>` + graphExplainHtml(data) + semanticHtml + pathCardsHtml(data);
+  $('graphInfo').innerHTML = `<div class="graph-side-card"><h4>图例说明</h4>${graphLegendHtml()}</div>` + graphExplainHtml(data) + semanticHtml;
 }
 function distributeYs(count, top=90, bottom=760){
   if(count <= 0) return [];
@@ -987,7 +987,7 @@ async function loadProfile(){
     if($('tagCloud')){
       $('tagCloud').innerHTML = `
         <div class="guest-profile-card">
-          <div class="guest-profile-icon">KG</div>
+          <div class="guest-profile-icon">知</div>
           <div>
             <h4>登录后查看你的兴趣画像</h4>
             <p>系统会从阅读历史、书架、评分、评论和搜索行为中提取偏好标签、偏好作者和偏好领域。</p>
@@ -1345,7 +1345,7 @@ function autoResizeChatInput(el){
 function renderChatWelcome(){
   return `
     <div class="chat-welcome">
-      <div class="chat-welcome-logo">KG</div>
+      <div class="chat-welcome-logo">知</div>
       <h2>你好，我是你的 AI 荐书助手</h2>
       <p>你可以问我图书推荐、系统功能、阅读记录、购书方式和知识图谱相关问题。</p>
       <div class="chat-suggestions">

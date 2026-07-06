@@ -1694,6 +1694,144 @@
         transform:rotateY(168deg);
       }
     }
+
+    /* ===== Reader custom notification ===== */
+    .reader-notify-host{
+      position:fixed;
+      top:22px;
+      left:50%;
+      z-index:9999;
+      display:grid;
+      gap:12px;
+      width:min(460px, calc(100vw - 32px));
+      pointer-events:none;
+      transform:translateX(-50%);
+    }
+
+    .reader-notify{
+      pointer-events:auto;
+      display:grid;
+      grid-template-columns:42px minmax(0,1fr) 30px;
+      align-items:center;
+      gap:12px;
+      padding:14px;
+      border:1px solid rgba(255,255,255,.82);
+      border-radius:22px;
+      background:rgba(255,255,255,.92);
+      box-shadow:
+        0 24px 70px rgba(15,23,42,.22),
+        inset 0 1px 0 rgba(255,255,255,.88);
+      backdrop-filter:blur(22px);
+      animation:readerNotifyIn .24s ease-out;
+    }
+
+    .reader-notify.leaving{
+      animation:readerNotifyOut .22s ease-in forwards;
+    }
+
+    .reader-notify-icon{
+      width:42px;
+      height:42px;
+      display:grid;
+      place-items:center;
+      border-radius:16px;
+      color:#fff;
+      font-size:14px;
+      font-weight:950;
+      box-shadow:0 12px 26px rgba(15,23,42,.16);
+    }
+
+    .reader-notify.success .reader-notify-icon{
+      background:linear-gradient(135deg,#10b981,#0ea5e9);
+    }
+
+    .reader-notify.error .reader-notify-icon{
+      background:linear-gradient(135deg,#ef4444,#f97316);
+    }
+
+    .reader-notify.info .reader-notify-icon{
+      background:linear-gradient(135deg,#7c3aed,#0ea5e9);
+    }
+
+    .reader-notify-body{
+      min-width:0;
+    }
+
+    .reader-notify-body b{
+      display:block;
+      margin-bottom:3px;
+      color:#111827;
+      font-size:14px;
+      font-weight:950;
+    }
+
+    .reader-notify-body span{
+      display:block;
+      color:#475569;
+      font-size:13px;
+      line-height:1.55;
+      overflow-wrap:anywhere;
+    }
+
+    .reader-notify-close{
+      width:30px;
+      height:30px;
+      padding:0;
+      border:0;
+      border-radius:999px;
+      background:rgba(15,23,42,.06);
+      color:#475569;
+      font-size:18px;
+      font-weight:900;
+      box-shadow:none;
+    }
+
+    .reader-notify-close:hover{
+      background:#111827;
+      color:#fff;
+      transform:none;
+      box-shadow:none;
+    }
+
+    @keyframes readerNotifyIn{
+      from{
+        opacity:0;
+        transform:translateY(-12px) scale(.96);
+      }
+      to{
+        opacity:1;
+        transform:translateY(0) scale(1);
+      }
+    }
+
+    @keyframes readerNotifyOut{
+      from{
+        opacity:1;
+        transform:translateY(0) scale(1);
+      }
+      to{
+        opacity:0;
+        transform:translateY(-10px) scale(.96);
+      }
+    }
+
+    body.night .reader-notify{
+      border-color:rgba(148,163,184,.18);
+      background:rgba(17,24,39,.92);
+    }
+
+    body.night .reader-notify-body b{
+      color:#f8fafc;
+    }
+
+    body.night .reader-notify-body span{
+      color:#cbd5e1;
+    }
+
+    body.night .reader-notify-close{
+      background:rgba(148,163,184,.16);
+      color:#e5e7eb;
+    }
   </style>
 </head>
 <body>
@@ -1712,7 +1850,7 @@
         <button onclick="zoomIn()">放大</button>
         <button class="ghost" onclick="fitWidth()">适宽</button>
         <button class="ghost" onclick="toggleNight()">夜间</button>
-        <button class="ghost" onclick="saveProgress(true, true)">保存进度</button>
+        <button id="markReadBtn" class="ghost" onclick="markAsRead()">标记已读</button>
       </div>
     </header>
     <main id="stage" class="stage" tabindex="-1"><div class="hint">正在加载阅读器...</div></main>
@@ -1735,6 +1873,7 @@
     let epubPhysicalPages = 1;
     let pageTimer = null, renderTimer = null, lastScrollTop = -1, rafId = null;
     let autoSaveTimer = null;
+    let autoSaveInterval = null;
     let lastSavedPage = 0;
     let lastSavedProgress = 0;
     let lastSavedAt = 0;
@@ -1743,6 +1882,59 @@
     let suppressAutoSave = true;
 
     const $ = id => document.getElementById(id);
+
+    function readerNotify(message, type='success', duration=2600){
+      let host = document.getElementById('readerNotifyHost');
+      if(!host){
+        host = document.createElement('div');
+        host.id = 'readerNotifyHost';
+        host.className = 'reader-notify-host';
+        document.body.appendChild(host);
+      }
+
+      const iconMap = {success:'OK', error:'!', info:'i'};
+      const titleMap = {success:'操作成功', error:'操作失败', info:'提示'};
+      const item = document.createElement('div');
+      item.className = 'reader-notify '+(type || 'info');
+
+      const icon = document.createElement('div');
+      icon.className = 'reader-notify-icon';
+      icon.textContent = iconMap[type] || iconMap.info;
+
+      const body = document.createElement('div');
+      body.className = 'reader-notify-body';
+
+      const title = document.createElement('b');
+      title.textContent = titleMap[type] || titleMap.info;
+
+      const text = document.createElement('span');
+      text.textContent = String(message || '');
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'reader-notify-close';
+      closeBtn.textContent = '×';
+      closeBtn.setAttribute('aria-label', '关闭提示');
+
+      body.appendChild(title);
+      body.appendChild(text);
+      item.appendChild(icon);
+      item.appendChild(body);
+      item.appendChild(closeBtn);
+
+      let closed = false;
+      const close = () => {
+        if(closed) return;
+        closed = true;
+        item.classList.add('leaving');
+        setTimeout(() => item.remove(), 220);
+      };
+
+      closeBtn.onclick = close;
+      host.appendChild(item);
+      setTimeout(close, duration);
+    }
+
     function escapeHtml(value){
       return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
@@ -2494,6 +2686,7 @@
       lastSavedAt = Date.now();
       readerReady = true;
       suppressAutoSave = false;
+      startAutoSaveLoop();
     }
 
     function goPage(){
@@ -2592,6 +2785,15 @@
       }, 900);
     }
 
+    function startAutoSaveLoop(){
+      if(autoSaveInterval) clearInterval(autoSaveInterval);
+
+      autoSaveInterval = setInterval(() => {
+        if(!readerReady || suppressAutoSave) return;
+        saveProgress(false).catch(()=>{});
+      }, 60000);
+    }
+
     function loginUrl(){
       const current = location.pathname + location.search + location.hash;
       const next = window.top && window.top !== window
@@ -2606,6 +2808,62 @@
         window.top.location.href = url;
       }else{
         location.href = url;
+      }
+    }
+
+    async function markAsRead(){
+      if(!token){
+        goLogin();
+        return;
+      }
+
+      const btn = $('markReadBtn');
+      const oldText = btn ? btn.textContent : '';
+
+      try{
+        if(btn){
+          btn.disabled = true;
+          btn.textContent = '标记中...';
+        }
+
+        const now = Date.now();
+        const minutes = Math.max(0, Math.round((now - readerEnterAt) / 60000));
+        const finalPage = Math.max(1, pageTotal || page || 1);
+
+        await api('/user/progress/'+bookId, {
+          method:'POST',
+          body:JSON.stringify({
+            current_page:finalPage,
+            progress_percent:100,
+            reading_minutes:minutes,
+            last_device:'Web Reader'
+          })
+        });
+
+        page = finalPage;
+        lastSavedPage = finalPage;
+        lastSavedProgress = 100;
+        lastSavedAt = now;
+        readerEnterAt = now;
+
+        updateUi();
+
+        window.parent?.postMessage({
+          type:'reader-progress-saved',
+          book_id:Number(bookId),
+          current_page:finalPage,
+          progress_percent:100,
+          status:'read'
+        }, '*');
+
+        readerNotify('已标记为已读，并已加入“已读”书架', 'success');
+      }catch(e){
+        readerNotify('标记已读失败：'+(e.message || '请稍后重试'), 'error', 3600);
+      }finally{
+        if(btn){
+          btn.disabled = false;
+          btn.textContent = oldText || '标记已读';
+        }
       }
     }
 
@@ -2654,9 +2912,9 @@
           progress_percent:currentProgress
         }, '*');
 
-        if(showTip) alert('进度已保存：'+Math.round(currentProgress)+'%');
+        if(showTip) readerNotify('进度已保存：'+Math.round(currentProgress)+'%', 'success');
       }catch(e){
-        if(showTip) alert('保存失败：'+(e.message || '请稍后重试'));
+        if(showTip) readerNotify('保存失败：'+(e.message || '请稍后重试'), 'error', 3600);
         throw e;
       }
     }
@@ -2676,6 +2934,8 @@
     });
 
     window.addEventListener('beforeunload', () => {
+      if(autoSaveInterval) clearInterval(autoSaveInterval);
+
       if(readerReady && !suppressAutoSave){
         saveProgress(false, false).catch(()=>{});
       }

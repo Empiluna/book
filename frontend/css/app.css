@@ -1443,7 +1443,7 @@
   background:linear-gradient(135deg,rgba(255,255,255,.90),rgba(245,243,255,.86));
 }
 
-/* ===== Knowledge Graph Visual Upgrade v10 ===== */
+/* ===== 知识图谱视觉升级 v10 ===== */
 .graph-layout{
   grid-template-columns:minmax(0,1fr) 300px !important;
   gap:18px !important;
@@ -1593,5 +1593,89 @@
   .graph-canvas-card svg,
   #graphSvg{
     height:640px !important;
+  }
+}
+
+/* ===== Final cleanup: home recommendation title and graph toolbar ===== */
+#home .section-title > span{
+  display:none !important;
+}
+
+#graph .graph-toolbar{
+  display:flex !important;
+  align-items:flex-end !important;
+  gap:16px !important;
+  flex-wrap:wrap !important;
+  margin:14px 0 18px !important;
+  padding:16px 18px !important;
+  border-radius:22px !important;
+  background:rgba(255,255,255,.68) !important;
+  border:1px solid rgba(148,163,184,.24) !important;
+}
+
+#graph .graph-toolbar label{
+  width:170px !important;
+  min-width:170px !important;
+  height:70px !important;
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:flex-end !important;
+  gap:8px !important;
+  margin:0 !important;
+  color:#667085 !important;
+  font-size:13px !important;
+  font-weight:900 !important;
+}
+
+#graph #graphBookPickerWrap{
+  width:260px !important;
+  min-width:260px !important;
+}
+
+#graph .graph-toolbar select{
+  width:100% !important;
+  height:46px !important;
+  margin:0 !important;
+  padding:0 14px !important;
+  border-radius:16px !important;
+  font-size:15px !important;
+  font-weight:900 !important;
+  line-height:46px !important;
+}
+
+#graph .graph-toolbar > button{
+  height:46px !important;
+  align-self:flex-end !important;
+  margin:0 !important;
+  padding:0 24px !important;
+  border-radius:16px !important;
+  font-size:15px !important;
+}
+
+#graph .graph-toolbar .hint{
+  flex:1 1 360px !important;
+  min-width:280px !important;
+  align-self:center !important;
+  padding:22px 0 0 !important;
+  margin:0 !important;
+  color:#667085 !important;
+  font-size:13px !important;
+  line-height:1.6 !important;
+}
+
+@media(max-width:900px){
+  #graph .graph-toolbar{
+    align-items:stretch !important;
+  }
+  #graph .graph-toolbar label,
+  #graph #graphBookPickerWrap,
+  #graph .graph-toolbar > button,
+  #graph .graph-toolbar .hint{
+    width:100% !important;
+    min-width:0 !important;
+    flex:1 1 100% !important;
+  }
+  #graph .graph-toolbar .hint{
+    padding:0 !important;
   }
 }
