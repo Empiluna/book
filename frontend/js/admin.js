@@ -6,7 +6,6 @@ let lastAdminGraphStats = null;
 
 function $(id){ return document.getElementById(id); }
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
-function uploadHeaders(){ return token ? {'Authorization': `Bearer ${token}`} : {}; }
 function isAdmin(){ return !!(currentUser && currentUser.is_admin); }
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),2600); }
 function attr(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -264,7 +263,7 @@ function adminSwitchTab(tab){
   document.querySelectorAll('.admin-tab').forEach(x=>x.classList.toggle('active', x.dataset.adminTab===tab));
   document.querySelectorAll('.admin-pane').forEach(x=>x.classList.remove('active'));
   $(panes[tab] || 'adminBooks')?.classList.add('active');
-  if(tab === 'books') adminLoadBooks();
+  if(tab === 'books') { adminLoadBooks(); adminLoadImportBatches(); }
   if(tab === 'users') adminLoadUsers();
   if(tab === 'comments') adminLoadComments();
   if(tab === 'settings') adminLoadSettings();
@@ -275,54 +274,47 @@ async function adminLoadBooks(){
   const q = $('adminBookSearch')?.value?.trim();
   const data = await api(q ? `/books?q=${encodeURIComponent(q)}&limit=80` : '/books/admin/export-json').catch(e=>({items:[], error:e.message}));
   if(data.error){ $('adminBookList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
-  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>资源</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>{ const resource = b.ebook_epub_url ? 'EPUB' : (b.ebook_pdf_url ? 'PDF' : '文本'); return `<tr><td>${b.id}</td><td>${html(b.title)}</td><td>${html((b.authors||[]).join('、'))}</td><td>${html(b.category||'')}</td><td><span class="status-ok">${resource}</span></td><td>${b.avg_rating||0}</td><td><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>` }).join('') || '<tr><td colspan="7">暂无图书</td></tr>'}</tbody></table>`;
+  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>`<tr><td>${b.id}</td><td>${b.title}</td><td>${(b.authors||[]).join('、')}</td><td>${b.category||''}</td><td>${b.avg_rating||0}</td><td><button onclick="adminEditBook(${b.id})">编辑</button><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无图书</td></tr>'}</tbody></table>`;
 }
 
-function adminResetBookForm(){ /* 旧的手动图书表单已删除，仅保留 EPUB 上传入库。 */ }
-
-function adminResetEpubUploadForm(){
-  $('adminEpubUploadForm')?.reset();
-  if($('adminUploadPageCount')) $('adminUploadPageCount').value = '240';
+async function adminEditBook(id){
+  const b = await api(`/books/${id}`);
+  $('adminBookId').value = b.id;
+  $('adminBookTitle').value = b.title || '';
+  $('adminBookAuthors').value = (b.authors||[]).join('，');
+  $('adminBookCategory').value = b.category || '';
+  $('adminBookTags').value = (b.tags||[]).join('，');
+  $('adminBookPublisher').value = b.publisher || '';
+  $('adminBookYear').value = b.publication_year || '';
+  $('adminBookCover').value = b.cover_url && !String(b.cover_url).startsWith('data:') ? b.cover_url : '';
+  $('adminBookDescription').value = b.description || '';
+  adminSwitchTab('books');
 }
 
-async function adminUploadEpubBook(event){
-  event?.preventDefault?.();
-  if(!isAdmin()) return toast('请先使用管理员账号登录');
-  const file = $('adminUploadEpubFile')?.files?.[0];
-  if(!file) return toast('请选择 EPUB 文件');
-  if(!/\.epub$/i.test(file.name)) return toast('只支持上传 .epub 文件');
-
-  const fd = new FormData();
-  fd.append('file', file);
-  const cover = $('adminUploadCoverFile')?.files?.[0];
-  if(cover) fd.append('cover', cover);
-  const fields = {
-    title: $('adminUploadTitle')?.value?.trim(),
-    authors: $('adminUploadAuthors')?.value?.trim(),
-    category: $('adminUploadCategory')?.value?.trim(),
-    tags: $('adminUploadTags')?.value?.trim(),
-    publisher: $('adminUploadPublisher')?.value?.trim(),
-    publication_year: $('adminUploadYear')?.value?.trim(),
-    isbn: $('adminUploadIsbn')?.value?.trim(),
-    page_count: $('adminUploadPageCount')?.value?.trim(),
-    description: $('adminUploadDescription')?.value?.trim(),
+function adminResetBookForm(){ $('adminBookForm')?.reset(); if($('adminBookId')) $('adminBookId').value=''; }
+function adminBookPayload(){
+  const year = Number($('adminBookYear').value);
+  return {
+    title: $('adminBookTitle').value.trim(),
+    authors: adminSplit($('adminBookAuthors').value),
+    category: $('adminBookCategory').value.trim() || null,
+    tags: adminSplit($('adminBookTags').value),
+    publisher: $('adminBookPublisher').value.trim() || null,
+    publication_year: year || null,
+    cover_url: $('adminBookCover').value.trim() || null,
+    description: $('adminBookDescription').value.trim() || null,
   };
-  Object.entries(fields).forEach(([k,v])=>{ if(v) fd.append(k, v); });
+}
 
-  const btn = event?.submitter || $('adminEpubUploadForm')?.querySelector('button[type="submit"]');
-  if(btn){ btn.disabled = true; btn.textContent = '上传中...'; }
-  try{
-    const res = await fetch(API + '/books/admin/upload-epub', {method:'POST', headers:uploadHeaders(), body:fd});
-    const data = await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(data.detail || data.message || '上传失败');
-    toast(data.message || 'EPUB 图书已入库');
-    adminResetEpubUploadForm();
-    await Promise.allSettled([adminLoadBooks(), loadAdmin()]);
-  }catch(e){
-    toast(e.message || '上传失败');
-  }finally{
-    if(btn){ btn.disabled = false; btn.textContent = '上传并入库'; }
-  }
+async function adminSaveBook(event){
+  event?.preventDefault?.();
+  const id = $('adminBookId').value;
+  const payload = adminBookPayload();
+  if(!payload.title) return toast('请填写书名');
+  await api(id ? `/books/admin/${id}` : '/books/admin', {method:id?'PUT':'POST', body:JSON.stringify(payload)});
+  toast('图书已保存');
+  adminResetBookForm();
+  await adminLoadBooks();
 }
 
 async function adminDeleteBook(id, title){
@@ -333,6 +325,203 @@ async function adminDeleteBook(id, title){
 }
 
 async function adminReindex(){ const r = await api('/books/admin/reindex-search', {method:'POST'}); toast(`已重建索引：${r.indexed || 0} 本`); }
+
+
+let adminCurrentImportBatch = null;
+let adminCurrentImportItems = [];
+let adminCurrentImportItemId = null;
+
+function adminStatusText(status){
+  return {pending:'待编辑', edited:'已编辑', committed:'已入库', failed:'失败', staged:'暂存'}[status] || status || '待编辑';
+}
+function adminImportItemById(id){ return adminCurrentImportItems.find(x => Number(x.id) === Number(id)); }
+
+function adminPreviewSelectedEpubFiles(){
+  const input = $('adminBatchEpubFiles');
+  const preview = $('adminSelectedEpubPreview');
+  if(!preview) return;
+  const files = Array.from(input?.files || []);
+  if(!files.length){
+    preview.innerHTML = '';
+    return;
+  }
+  const epubFiles = files.filter(file => String(file.name || '').toLowerCase().endsWith('.epub'));
+  preview.innerHTML = `<b>已选择 ${files.length} 个文件，EPUB ${epubFiles.length} 个：</b>` + files.slice(0, 20).map(file => `<span>${html(file.name)}</span>`).join('') + (files.length > 20 ? `<span>还有 ${files.length - 20} 个...</span>` : '');
+}
+
+function adminRenderImportList(){
+  const list = $('adminImportList');
+  const summary = $('adminImportSummary');
+  if(!list) return;
+  if(!adminCurrentImportItems.length){
+    list.innerHTML = '<div class="epub-editor-empty">还没有待入库文件</div>';
+    if(summary) summary.textContent = '一次性选择多个 EPUB 文件上传后，所有文件会同时显示在左侧。';
+    return;
+  }
+  const committed = adminCurrentImportItems.filter(x => x.status === 'committed').length;
+  const edited = adminCurrentImportItems.filter(x => x.status === 'edited').length;
+  const pending = adminCurrentImportItems.filter(x => x.status === 'pending').length;
+  const failed = adminCurrentImportItems.filter(x => x.status === 'failed').length;
+  if(summary){
+    summary.textContent = `当前批次：${adminCurrentImportBatch?.batch_no || '-'}，共 ${adminCurrentImportItems.length} 本，待编辑 ${pending} 本，已编辑 ${edited} 本，已入库 ${committed} 本，失败 ${failed} 本。`;
+  }
+  list.innerHTML = adminCurrentImportItems.map(item => `
+    <button class="epub-import-item ${Number(item.id) === Number(adminCurrentImportItemId) ? 'active' : ''}" onclick="adminSelectImportItem(${item.id})">
+      <span><b>${html(item.title || item.original_filename)}</b><span>${html(item.original_filename)}</span></span>
+      <em class="epub-status ${html(item.status)}">${adminStatusText(item.status)}</em>
+    </button>
+  `).join('');
+}
+
+function adminFillImportEditor(item){
+  adminCurrentImportItemId = item?.id || null;
+  const form = $('adminImportEditor');
+  const empty = $('adminImportEditorEmpty');
+  if(!item){
+    form?.classList.add('hidden');
+    empty?.classList.remove('hidden');
+    adminRenderImportList();
+    return;
+  }
+  empty?.classList.add('hidden');
+  form?.classList.remove('hidden');
+  $('adminImportEditorTitle').textContent = `编辑：${item.original_filename}`;
+  $('adminImportItemId').value = item.id;
+  $('adminImportTitle').value = item.title || '';
+  $('adminImportAuthors').value = item.authors_text || (item.authors || []).join('，');
+  $('adminImportCategory').value = item.category || '';
+  $('adminImportTags').value = item.tags_text || (item.tags || []).join('，');
+  $('adminImportPublisher').value = item.publisher || '';
+  $('adminImportYear').value = item.publication_year || '';
+  $('adminImportIsbn').value = item.isbn || '';
+  $('adminImportPages').value = item.page_count || 240;
+  $('adminImportCoverUrl').value = item.cover_url || '';
+  $('adminImportDescription').value = item.description || '';
+  if($('adminImportCoverFile')) $('adminImportCoverFile').value = '';
+  adminRenderImportList();
+}
+
+function adminSelectImportItem(id){
+  const item = adminImportItemById(id);
+  if(!item) return toast('待入库文件不存在');
+  adminFillImportEditor(item);
+}
+
+async function adminStageEpubFiles(){
+  const input = $('adminBatchEpubFiles');
+  const btn = $('adminStageEpubBtn');
+  const files = Array.from(input?.files || []);
+  if(!files.length) return toast('请一次性选择多个 EPUB 文件');
+  const epubFiles = files.filter(file => String(file.name || '').toLowerCase().endsWith('.epub'));
+  if(!epubFiles.length) return toast('请选择 .epub 文件');
+  if(epubFiles.length !== files.length) toast(`已过滤 ${files.length - epubFiles.length} 个非 EPUB 文件`);
+
+  const form = new FormData();
+  epubFiles.forEach(file => form.append('files', file, file.name));
+  if(btn){ btn.disabled = true; btn.textContent = `正在上传 ${epubFiles.length} 本...`; }
+  try{
+    const res = await fetch(API + '/books/admin/import-stage', {
+      method:'POST',
+      headers: token ? {'Authorization': `Bearer ${token}`} : {},
+      body: form,
+    });
+    if(!res.ok){
+      const text = await res.text();
+      throw new Error(text || '上传失败');
+    }
+    const data = await res.json();
+    adminCurrentImportBatch = data.batch;
+    adminCurrentImportItems = data.batch?.items || [];
+    toast(data.message || `已上传 ${adminCurrentImportItems.length} 本到待入库`);
+    adminFillImportEditor(adminCurrentImportItems[0] || null);
+    if(input) input.value = '';
+    if($('adminSelectedEpubPreview')) $('adminSelectedEpubPreview').innerHTML = '';
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '批量上传到待入库'; }
+  }
+}
+
+async function adminLoadImportBatches(){
+  const data = await api('/books/admin/import-batches?limit=1').catch(e=>({items:[], error:e.message}));
+  if(data.error) return toast(data.error);
+  const batch = (data.items || [])[0];
+  if(!batch){
+    adminCurrentImportBatch = null;
+    adminCurrentImportItems = [];
+    adminFillImportEditor(null);
+    return;
+  }
+  adminCurrentImportBatch = batch;
+  adminCurrentImportItems = batch.items || [];
+  adminFillImportEditor(adminCurrentImportItems[0] || null);
+}
+
+async function adminSaveImportItem(event){
+  event?.preventDefault?.();
+  const id = $('adminImportItemId')?.value;
+  if(!id) return toast('请先选择左侧待入库文件');
+  if(!$('adminImportTitle').value.trim()) return toast('请填写书名');
+  const form = new FormData();
+  form.append('title', $('adminImportTitle').value.trim());
+  form.append('authors', $('adminImportAuthors').value.trim());
+  form.append('category', $('adminImportCategory').value.trim());
+  form.append('tags', $('adminImportTags').value.trim());
+  form.append('publisher', $('adminImportPublisher').value.trim());
+  form.append('publication_year', $('adminImportYear').value.trim());
+  form.append('isbn', $('adminImportIsbn').value.trim());
+  form.append('page_count', $('adminImportPages').value.trim() || '240');
+  form.append('cover_url', $('adminImportCoverUrl').value.trim());
+  form.append('description', $('adminImportDescription').value.trim());
+  const cover = $('adminImportCoverFile')?.files?.[0];
+  if(cover) form.append('cover_file', cover);
+  const res = await fetch(API + `/books/admin/import-items/${id}`, {
+    method:'PUT',
+    headers: token ? {'Authorization': `Bearer ${token}`} : {},
+    body: form,
+  });
+  if(!res.ok){
+    const text = await res.text();
+    throw new Error(text || '保存失败');
+  }
+  const data = await res.json();
+  const index = adminCurrentImportItems.findIndex(x => Number(x.id) === Number(id));
+  if(index >= 0) adminCurrentImportItems[index] = data.item;
+  toast('当前图书信息已保存');
+  adminFillImportEditor(data.item);
+}
+
+async function adminCommitCurrentImportItem(){
+  const id = $('adminImportItemId')?.value;
+  if(!id) return toast('请先选择左侧待入库文件');
+  if(!confirm('确认把当前图书写入数据库？')) return;
+  const data = await api(`/books/admin/import-items/${id}/commit`, {method:'POST'});
+  const index = adminCurrentImportItems.findIndex(x => Number(x.id) === Number(id));
+  if(index >= 0) adminCurrentImportItems[index] = data.item;
+  toast(data.message || '已入库');
+  adminFillImportEditor(data.item);
+  await adminLoadBooks();
+}
+
+async function adminCommitCurrentBatch(){
+  if(!adminCurrentImportBatch?.id) return toast('请先批量上传 EPUB 文件');
+  if(!confirm('确认批量入库当前批次中所有已填写书名的图书？')) return;
+  const data = await api(`/books/admin/import-batches/${adminCurrentImportBatch.id}/commit`, {method:'POST'});
+  adminCurrentImportBatch = data.batch;
+  adminCurrentImportItems = data.batch?.items || [];
+  toast(data.message || '批量入库完成');
+  adminFillImportEditor(adminCurrentImportItems[0] || null);
+  await adminLoadBooks();
+}
+
+async function adminDeleteCurrentImportItem(){
+  const id = $('adminImportItemId')?.value;
+  if(!id) return toast('请先选择待入库文件');
+  if(!confirm('确认移除这个待入库文件？')) return;
+  await api(`/books/admin/import-items/${id}`, {method:'DELETE'});
+  adminCurrentImportItems = adminCurrentImportItems.filter(x => Number(x.id) !== Number(id));
+  toast('已移除');
+  adminFillImportEditor(adminCurrentImportItems[0] || null);
+}
 
 function adminCheckedValues(selector){
   return Array.from(document.querySelectorAll(selector + ':checked'))
@@ -458,7 +647,7 @@ async function adminRunCypher(){
 }
 
 document.querySelectorAll('.admin-tab').forEach(btn=>btn.addEventListener('click',()=>adminSwitchTab(btn.dataset.adminTab)));
-$('adminEpubUploadForm')?.addEventListener('submit', adminUploadEpubBook);
+$('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('adminLoginBtn').onclick = adminLogin;
 $('logoutBtn').onclick = logout;
 $('adminAssistantBtn').onclick = openAdminAssistant;
