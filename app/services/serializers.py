@@ -51,8 +51,17 @@ def purchase_link_card(link: PurchaseLink) -> dict[str, Any]:
     }
 
 
-def book_card(book: Book, score: float | None = None, reason: str | None = None, source: str | None = None, paths: list | None = None) -> dict[str, Any]:
-    links = [purchase_link_card(x) for x in getattr(book, "purchase_links", []) if x.is_active]
+def book_card(
+    book: Book,
+    score: float | None = None,
+    reason: str | None = None,
+    source: str | None = None,
+    paths: list | None = None,
+    include_description: bool = False,
+    include_purchase: bool = False,
+    include_trial_text: bool = False,
+) -> dict[str, Any]:
+    links = [purchase_link_card(x) for x in getattr(book, "purchase_links", []) if x.is_active] if include_purchase else []
     best = min(links, key=lambda x: x["price"] if x.get("price") is not None else 10**9) if links else None
     authors = author_names(book)
     category = primary_category(book.category)
@@ -61,7 +70,7 @@ def book_card(book: Book, score: float | None = None, reason: str | None = None,
     if cover_url and cover_url.startswith("/data/book_read/"):
         name = cover_url.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         cover_thumb_url = f"/data/book_read/thumbs/{name}.jpg"
-    return {
+    data = {
         "id": book.id,
         "book_id": book.id,
         "title": book.title,
@@ -76,8 +85,7 @@ def book_card(book: Book, score: float | None = None, reason: str | None = None,
         "raw_category": book.category,
         "difficulty": book.difficulty,
         "tags": tag_names(book),
-        "description": book.description,
-        "trial_text": book.trial_text,
+        "description": book.description if include_description else None,
         "cover_url": cover_url,
         "cover_thumb_url": cover_thumb_url or cover_url,
         "ebook_pdf_url": book.ebook_pdf_url,
@@ -93,10 +101,14 @@ def book_card(book: Book, score: float | None = None, reason: str | None = None,
         "source": source,
         "reason": reason,
         "paths": paths or [],
-        "purchase_links": links,
-        "best_purchase": best,
-        "purchase_channels": build_purchase_channels(book.title, " ".join(authors), book.isbn or ""),
     }
+    if include_purchase:
+        data["purchase_links"] = links
+        data["best_purchase"] = best
+        data["purchase_channels"] = build_purchase_channels(book.title, " ".join(authors), book.isbn or "")
+    if include_trial_text:
+        data["trial_text"] = book.trial_text
+    return data
 
 
 def user_card(user: User) -> dict[str, Any]:

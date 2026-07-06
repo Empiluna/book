@@ -89,10 +89,13 @@ async function loadShelfState(){
   return shelfState;
 }
 
-function bookCard(b){
+function bookCard(b, eager=false){
   const id = b.id || b.book_id;
   const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${b.cover_url||''}" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+  const cover = b.cover_thumb_url || b.cover_url || '';
+  const loading = eager ? 'eager' : 'lazy';
+  const priority = eager ? ' fetchpriority="high"' : '';
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
 }
 async function recordFeedback(bookId, eventType, source='frontend'){
   if(!bookId) return;
@@ -118,10 +121,11 @@ async function markNotInterested(event, bookId){
 }
 function recordExposure(items, source='home'){
   if(!Array.isArray(items)) return;
-  items.slice(0, 20).forEach(b=>{
-    const id = b.id || b.book_id;
-    if(id) recordFeedback(id, 'exposure', source);
-  });
+  const ids = items.slice(0, 8).map(b => b.id || b.book_id).filter(Boolean);
+  if(!ids.length) return;
+  window.setTimeout(() => {
+    ids.forEach(id => recordFeedback(id, 'exposure', source));
+  }, 2000);
 }
 function miniItem(b){ return `<div class="mini-item" onclick="openDetail(${b.id || b.book_id})"><div><b>${b.title}</b><br><span>${(b.authors||[]).join('、')||b.author||''} · ⭐ ${b.avg_rating||0}</span></div><span>${b.category||''}</span></div>`; }
 function shelfMiniItem(item, shelfName){
@@ -168,15 +172,15 @@ async function loadMetrics(){
     $('mComments').textContent = dash?.cards?.comments ?? '--';
   }
 }
-async function loadRecommendations(){ await loadShelfState(); const data = await api('/recommend/home?limit=16'); currentBooks = data.items; $('recommendGrid').innerHTML = data.items.map(bookCard).join(''); recordExposure(data.items, 'home'); populateGraphBookSelect(); }
+async function loadRecommendations(){ const data = await api('/recommend/home?limit=16'); currentBooks = data.items; $('recommendGrid').innerHTML = data.items.map(b => bookCard(b, true)).join(''); refreshShelfButtons(); recordExposure(data.items, 'home'); populateGraphBookSelect(); }
 async function loadHot(){ const data = await api('/recommend/hot?limit=8'); $('hotList').innerHTML = data.items.map(miniItem).join(''); }
 async function loadNew(){ const data = await api('/recommend/new?limit=8'); $('newList').innerHTML = data.items.map(miniItem).join(''); }
 async function loadBooks(q=''){
-  await loadShelfState();
   const data = await api('/books' + (q ? `?q=${encodeURIComponent(q)}&limit=40&mode=hybrid` : '?limit=40'));
   currentBooks = data.items;
   $('resultHint').textContent = `找到 ${data.total} 本相关图书 · ${data.search_backend}`;
   $('bookGrid').innerHTML = data.items.map(bookCard).join('');
+  refreshShelfButtons();
   recordExposure(data.items, q ? 'search' : 'discover');
   populateGraphBookSelect();
 }
@@ -829,10 +833,11 @@ function guestShelfBookCard(book, badge='热门推荐'){
   const authors = (book.authors || []).join('、') || book.author || '未知作者';
   const tags = (book.tags || []).slice(0, 3).map(t => `<span class="tag">${attr(t)}</span>`).join('');
   const rating = Number(book.avg_rating || 0).toFixed(1).replace('.0','');
+  const cover = book.cover_thumb_url || book.cover_url || '';
   return `
     <article class="guest-book-card" onclick="openDetail(${id})">
       <div class="guest-cover-wrap">
-        <img class="guest-cover" src="${book.cover_url || ''}" alt="${attr(book.title || '')}" onerror="this.style.display='none';this.parentElement.classList.add('no-cover')">
+        <img class="guest-cover" src="${cover}" loading="lazy" decoding="async" alt="${attr(book.title || '')}" onerror="this.style.display='none';this.parentElement.classList.add('no-cover')">
         <span>${badge}</span>
       </div>
       <div class="guest-book-body">
@@ -1729,7 +1734,20 @@ async function removeShelfBook(event, bookId, shelfName){
   toast('已从书架删除');
   await Promise.allSettled([loadShelves(), loadShelfState(), loadProfile(), loadOriginalLibrary()]);
 }
-async function loadAll(){ setupOriginalWorkshop(); await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile(), loadOriginalLibrary()]); }
+async function loadAll(){
+  setupOriginalWorkshop();
+  const shelfReady = token ? loadShelfState().then(refreshShelfButtons).catch(()=>{}) : Promise.resolve();
+  await Promise.allSettled([
+    loadMetrics(),
+    loadRecommendations(),
+    loadHot(),
+    loadNew(),
+    loadBooks(),
+    loadOptions(),
+    loadHotSearches()
+  ]);
+  shelfReady.then(refreshShelfButtons).catch(()=>{});
+}
 
 function activateView(view){
   if(view === 'admin' && !isAdmin()){

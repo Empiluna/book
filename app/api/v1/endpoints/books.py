@@ -8,6 +8,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_optional, require_admin
@@ -190,7 +191,12 @@ def _apply_book_payload(db: Session, book: Book, payload: BookCreate | BookUpdat
 
 @router.get("/meta/options")
 def book_options(db: Session = Depends(get_db)):
-    books = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
+    books = (
+        db.query(Book)
+        .options(selectinload(Book.tags), selectinload(Book.authors), selectinload(Book.publisher))
+        .filter(Book.is_deleted == False)
+        .all()
+    )  # noqa: E712
     cats = sorted({b.category for b in books if b.category})
     tags = sorted({t.name for b in books for t in b.tags})
     authors = sorted({a.name for b in books for a in b.authors})
@@ -245,7 +251,7 @@ def book_detail(book_id: int, db: Session = Depends(get_db)):
     book.view_count += 1
     book.hot_score = (book.hot_score or 0) + 0.2
     db.commit()
-    data = book_card(book)
+    data = book_card(book, include_description=True, include_purchase=True)
     data["graph_relations"] = GraphService(db).subgraph(book_id, depth=1)
     return data
 

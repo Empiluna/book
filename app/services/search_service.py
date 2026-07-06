@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
 from app.models import Author, Book, Publisher, SearchLog, Tag, User
@@ -351,7 +351,28 @@ class SearchService:
         return {"items": items, "total": total, "page": page, "limit": limit, "search_backend": "elasticsearch", "index": self.index_name}
 
     def _search_sql(self, q: str | None, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None, record: bool = True) -> dict:
-        query = self.db.query(Book).filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))  # noqa: E712
+        query = (
+            self.db.query(Book)
+            .options(
+                selectinload(Book.authors),
+                selectinload(Book.tags),
+                selectinload(Book.publisher),
+                selectinload(Book.series),
+            )
+            .filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))
+        )  # noqa: E712
+        if not q and not category and not tag and not author:
+            total = query.count()
+            if sort == "rating":
+                query = query.order_by(Book.avg_rating.desc(), Book.rating_count.desc())
+            elif sort == "new":
+                query = query.order_by(Book.is_new.desc(), Book.created_at.desc())
+            elif sort == "title":
+                query = query.order_by(Book.title.asc())
+            else:
+                query = query.order_by((Book.hot_score + Book.view_count * 0.1 + Book.avg_rating).desc())
+            books = query.offset((page - 1) * limit).limit(limit).all()
+            return {"items": [book_card(b) for b in books], "total": total, "page": page, "limit": limit, "search_backend": "sql-fallback"}
         if q:
             terms = self._query_terms(q)
             conditions = []

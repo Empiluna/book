@@ -6,16 +6,14 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.cache import cache
 from app.core.config import get_settings
 from app.models import (
     Book,
-    BookComment,
     Bookmark,
-    PurchaseClick,
     ReadingHistory,
     ReadingProgress,
     RecommendationFeedback,
@@ -127,25 +125,43 @@ class RecommendService:
         return bool(book and not book.is_deleted and book.category != ORIGINAL_CATEGORY)
 
     def hot_scores(self, limit: int = 50) -> list[dict]:
-        books = [b for b in self.db.query(Book).filter(Book.is_deleted == False).all() if self._is_public_book(b)]  # noqa: E712
+        books = (
+            self.db.query(Book)
+            .options(
+                selectinload(Book.authors),
+                selectinload(Book.tags),
+                selectinload(Book.publisher),
+                selectinload(Book.series),
+            )
+            .filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))
+            .order_by((Book.hot_score + Book.view_count * 0.1 + Book.trial_count * 0.2 + Book.avg_rating * 1.5).desc())
+            .limit(limit)
+            .all()
+        )  # noqa: E712
         rows = []
         for b in books:
-            comments = self.db.query(BookComment).filter_by(book_id=b.id, is_deleted=False).count()
-            bookmarks = self.db.query(Bookmark).filter_by(book_id=b.id).count()
-            purchases = self.db.query(PurchaseClick).filter_by(book_id=b.id).count()
-            score = (b.view_count * 0.16 + b.trial_count * 0.20 + bookmarks * 0.35 + comments * 0.45 + purchases * 0.55 + (b.avg_rating or 0) * 1.5 + (b.hot_score or 0))
+            score = (b.view_count * 0.16 + b.trial_count * 0.20 + (b.avg_rating or 0) * 1.5 + (b.hot_score or 0))
             rows.append((b, score))
-        rows.sort(key=lambda x: x[1], reverse=True)
         return [{"book": b, "score": self._norm(score), "source": "hot", "reason": "这本书在近30天综合热度较高，适合作为冷启动推荐。"} for b, score in rows[:limit]]
 
     def new_scores(self, limit: int = 50) -> list[dict]:
         rows = []
-        for b in self.db.query(Book).filter(Book.is_deleted == False).all():  # noqa: E712
-            if not self._is_public_book(b):
-                continue
-            if b.is_new:
-                score = 1.0 + (b.avg_rating or 0) * 0.12 + (b.hot_score or 0) * 0.08
-                rows.append((b, score))
+        books = (
+            self.db.query(Book)
+            .options(
+                selectinload(Book.authors),
+                selectinload(Book.tags),
+                selectinload(Book.publisher),
+                selectinload(Book.series),
+            )
+            .filter(Book.is_deleted == False, Book.is_new == True, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))
+            .order_by(Book.created_at.desc())
+            .limit(limit)
+            .all()
+        )  # noqa: E712
+        for b in books:
+            score = 1.0 + (b.avg_rating or 0) * 0.12 + (b.hot_score or 0) * 0.08
+            rows.append((b, score))
         rows.sort(key=lambda x: (x[1], x[0].created_at), reverse=True)
         return [{"book": b, "score": self._norm(score), "source": "new", "reason": "这是近期入库的新书，并且与你的兴趣标签保持一定相关性。"} for b, score in rows[:limit]]
 
