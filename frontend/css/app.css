@@ -2081,3 +2081,100 @@
     height:36px !important;
   }
 }
+
+
+/* ===== AI小说工坊：登录锁定 + 去重标题 + 视觉优化 ===== */
+.original-workshop{position:relative;display:grid;gap:18px}.original-hero-card{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 22px;border-radius:24px;background:linear-gradient(135deg,rgba(124,58,237,.10),rgba(14,165,233,.10));border:1px solid rgba(124,58,237,.12)}.original-hero-card p{margin:10px 0 0;color:#475467;line-height:1.7}.original-quick-tips{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;min-width:300px}.original-quick-tips span{padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.76);border:1px solid var(--line);color:#344054;font-size:12px;font-weight:800}.original-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);gap:18px}.original-result{display:grid;gap:16px}.original-card{padding:18px;border-radius:24px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.78);box-shadow:0 18px 44px rgba(31,41,55,.08)}.original-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.original-card-head h4{margin:0;font-size:18px}.original-card-head span{color:var(--muted);font-size:12px;font-weight:700}.original-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.original-editor label,.original-generated-box label{display:grid;gap:8px;margin-bottom:14px;color:#344054;font-size:13px;font-weight:800}.original-editor input,.original-editor select,.original-editor textarea,.original-generated-box textarea{width:100%;border:1px solid var(--line);border-radius:16px;padding:12px 14px;background:rgba(255,255,255,.86);outline:none;color:#111827;font:inherit}.original-editor textarea,.original-generated-box textarea{resize:vertical;line-height:1.65}.original-generated-box textarea{min-height:290px}.original-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.original-empty{padding:18px;border-radius:18px;background:rgba(15,23,42,.04);color:#475467;line-height:1.7}.original-save-progress{margin-top:14px;display:grid;gap:8px}.original-save-progress span{color:#475467;font-size:12px;font-weight:800}.original-save-progress div{height:10px;border-radius:999px;background:#eef2ff;overflow:hidden}.original-save-progress i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(135deg,var(--brand),var(--brand2))}.original-lock-mask{position:absolute;inset:0;z-index:5;display:grid;place-items:center;padding:24px;border-radius:28px;background:rgba(248,250,252,.58);backdrop-filter:blur(7px)}.original-lock-card{width:min(460px,92%);padding:30px;text-align:center;border-radius:28px;background:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.82);box-shadow:0 24px 70px rgba(15,23,42,.18)}.original-lock-icon{width:72px;height:72px;margin:0 auto 14px;display:grid;place-items:center;border-radius:24px;font-size:30px;background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(14,165,233,.16))}.original-lock-card h4{margin:0 0 10px;font-size:24px}.original-lock-card p{margin:0 0 18px;color:#475467;line-height:1.7}.original-locked .original-grid,.original-locked .original-hero-card{filter:saturate(.92)}@media(max-width:1100px){.original-grid,.original-hero-card{grid-template-columns:1fr}.original-hero-card{display:grid}.original-quick-tips{min-width:0;justify-content:flex-start}}@media(max-width:720px){.original-form-grid{grid-template-columns:1fr}}
+
+/* ===== 兴趣画像：圆形气泡，JS 写入字体大小，确保大气泡字体同步变大 ===== */
+#tagCloud.tag-cloud{display:block!important;margin:14px 0 16px!important}
+#tagCloud .interest-bubble-box{min-height:190px;padding:22px;border-radius:24px;border:1px solid rgba(124,58,237,.10);background:linear-gradient(135deg,rgba(255,255,255,.72),rgba(239,246,255,.64));display:flex!important;flex-wrap:wrap!important;align-items:center!important;justify-content:center!important;align-content:center!important;gap:16px!important}
+#tagCloud .interest-bubble{width:var(--bubble-size)!important;height:var(--bubble-size)!important;min-width:var(--bubble-size)!important;min-height:var(--bubble-size)!important;max-width:var(--bubble-size)!important;max-height:var(--bubble-size)!important;aspect-ratio:1/1!important;border-radius:50%!important;flex:0 0 var(--bubble-size)!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;padding:0 10px!important;line-height:1.12!important;white-space:normal!important;word-break:keep-all!important;overflow:hidden!important;color:#17202a;font-weight:900!important;letter-spacing:-.03em!important;font-size:var(--bubble-font,18px)!important;background:linear-gradient(135deg,rgba(124,58,237,.18),rgba(14,165,233,.16));border:1px solid rgba(124,58,237,.12);box-shadow:0 14px 34px rgba(124,58,237,.12)}
+#tagCloud .interest-bubble.primary{font-size:var(--bubble-font,24px)!important;background:linear-gradient(135deg,rgba(124,58,237,.26),rgba(14,165,233,.21));box-shadow:0 18px 42px rgba(14,165,233,.18)}
+#tagCloud .interest-bubble-box .meta{color:var(--muted);font-weight:700}
+@media(max-width:720px){#tagCloud .interest-bubble-box{justify-content:flex-start!important}}
+
+
+
+/* AI小说工坊：去掉 AI 辅助结果内部重复框，并让左右大框底部对齐 */
+.original-grid{
+  align-items:stretch !important;
+}
+.original-editor.original-card{
+  height:100% !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+.original-editor.original-card label{
+  width:100% !important;
+}
+.original-editor.original-card textarea{
+  width:100% !important;
+}
+.original-editor.original-card label:nth-of-type(5){
+  margin-top:2px !important;
+}
+.original-editor.original-card label:nth-of-type(5) textarea{
+  min-height:142px !important;
+}
+.original-actions{
+  margin-top:auto !important;
+  padding-top:18px !important;
+}
+.original-result{
+  height:100% !important;
+  display:grid !important;
+  grid-template-rows:auto minmax(0,1fr) auto !important;
+}
+.original-result .original-card{
+  min-width:0 !important;
+}
+.original-result .original-empty{
+  border:0 !important;
+  outline:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  padding:0 !important;
+  border-radius:0 !important;
+  color:#475467 !important;
+}
+.original-generated-box{
+  display:flex !important;
+  flex-direction:column !important;
+}
+.original-generated-box textarea{
+  flex:1 1 auto !important;
+  min-height:320px !important;
+}
+
+
+/* AI 辅助结果：恢复一个内层提示框，避免完全无框 */
+.original-result .original-empty{
+  border:1px dashed rgba(148,163,184,.42) !important;
+  background:rgba(248,250,252,.62) !important;
+  border-radius:18px !important;
+  padding:18px 20px !important;
+  box-shadow:none !important;
+  color:#475467 !important;
+  line-height:1.7 !important;
+}
+
+
+/* AI 辅助结果：只保留一个提示框，避免 original-empty 嵌套造成双框 */
+#originalAssistResult.original-empty{
+  border:1px dashed rgba(148,163,184,.42) !important;
+  background:rgba(248,250,252,.62) !important;
+  border-radius:18px !important;
+  padding:18px 20px !important;
+  box-shadow:none !important;
+  color:#475467 !important;
+  line-height:1.7 !important;
+}
+#originalAssistResult.original-empty > .original-empty{
+  border:0 !important;
+  outline:0 !important;
+  background:transparent !important;
+  border-radius:0 !important;
+  padding:0 !important;
+  box-shadow:none !important;
+}
