@@ -14,17 +14,33 @@
     .admin-table th:first-child,.admin-table td:first-child{width:46px;text-align:center}
     .admin-batchbar .danger-btn{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
 
-    .admin-upload-card{margin:12px 0 18px;padding:16px;border:1px solid rgba(124,58,237,.18);border-radius:18px;background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(14,165,233,.06))}
-    .admin-upload-card h3{margin:0 0 6px;font-size:18px}
-    .admin-upload-card .meta{margin:0 0 12px;color:#667085;font-size:13px;line-height:1.6}
-    .admin-upload-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-    .admin-upload-grid input,.admin-upload-grid textarea{width:100%}
-    .admin-upload-grid textarea{grid-column:span 2;min-height:78px}
-    .admin-upload-grid .wide{grid-column:span 2}
-    .admin-upload-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:900;color:#334155}
-    .admin-upload-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
-    .admin-upload-actions .hint{color:#667085;font-size:12px;font-weight:800}
-    @media(max-width:1100px){.admin-upload-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+    /* EPUB 批量待入库工作台 */
+    .epub-import-panel{margin:14px 0 16px;padding:18px;border:1px solid rgba(124,58,237,.18);border-radius:18px;background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(14,165,233,.07))}
+    .epub-import-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+    .epub-import-head h3{margin:0 0 6px;font-size:18px;color:#111827}
+    .epub-import-head p{margin:0;color:#64748b;font-size:13px;line-height:1.6}
+    .epub-import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 6px}
+    .epub-import-actions input[type=file]{padding:9px;border:1px dashed rgba(124,58,237,.28);border-radius:12px;background:rgba(255,255,255,.72);min-width:320px}
+    .epub-selected-preview{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px;color:#475569;font-size:12px}
+    .epub-selected-preview span{display:inline-flex;align-items:center;max-width:220px;height:28px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid rgba(148,163,184,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .epub-workbench{display:grid;grid-template-columns:340px 1fr;gap:16px;margin-top:14px}
+    .epub-file-list,.epub-editor{background:rgba(255,255,255,.82);border:1px solid rgba(148,163,184,.22);border-radius:18px;padding:14px;min-height:260px}
+    .epub-file-list h4,.epub-editor h4{margin:0 0 12px;font-size:15px;color:#111827}
+    .epub-import-item{width:100%;text-align:left;border:1px solid rgba(148,163,184,.2);background:#fff;border-radius:14px;padding:10px 12px;margin-bottom:9px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;color:#111827}
+    .epub-import-item:hover,.epub-import-item.active{border-color:#7c3aed;box-shadow:0 8px 18px rgba(124,58,237,.12)}
+    .epub-import-item b{display:block;font-size:13px;line-height:1.35;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .epub-import-item span span{display:block;font-size:11px;color:#64748b;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .epub-status{display:inline-flex;align-items:center;justify-content:center;min-width:56px;height:24px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:900;background:#f1f5f9;color:#475569;white-space:nowrap}
+    .epub-status.edited{background:#ecfdf5;color:#047857}.epub-status.committed{background:#ede9fe;color:#6d28d9}.epub-status.failed{background:#fef2f2;color:#b91c1c}
+    .epub-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .epub-editor-grid textarea{grid-column:1/-1;min-height:96px}
+    .epub-editor-grid input,.epub-editor-grid textarea{border:1px solid rgba(148,163,184,.35);border-radius:12px;padding:11px 12px;background:#fff;outline:none}
+    .epub-editor-grid input:focus,.epub-editor-grid textarea:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+    .epub-editor-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .epub-editor-empty{color:#64748b;padding:28px;border:1px dashed rgba(148,163,184,.36);border-radius:14px;text-align:center;background:rgba(248,250,252,.72)}
+    .epub-batch-summary{font-size:12px;color:#64748b;margin-top:8px;line-height:1.6}
+    @media(max-width:900px){.epub-workbench{grid-template-columns:1fr}.epub-editor-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -104,29 +120,55 @@
               <input id="adminBookSearch" placeholder="搜索图书" />
               <button onclick="adminLoadBooks()">搜索</button>
               <button onclick="adminReindex()">重建索引</button>
+              <button onclick="adminLoadImportBatches()">刷新待入库</button>
             </div>
-            <form id="adminEpubUploadForm" class="admin-upload-card">
-              <h3>上传 EPUB 图书入库</h3>
-              <p class="meta">管理员上传 EPUB 后，系统会自动创建图书记录；用户端可正常搜索、在线阅读、加入书架、评分和评论。</p>
-              <div class="admin-upload-grid">
-                <label class="wide">EPUB 文件<input id="adminUploadEpubFile" type="file" accept=".epub,application/epub+zip" required /></label>
-                <label class="wide">封面图，可选<input id="adminUploadCoverFile" type="file" accept="image/*" /></label>
-                <input id="adminUploadTitle" placeholder="书名，不填则使用文件名" />
-                <input id="adminUploadAuthors" placeholder="作者，多个用逗号分隔" />
-                <input id="adminUploadCategory" placeholder="分类，例如 科幻 / 文学 / 技术" />
-                <input id="adminUploadTags" placeholder="标签，多个用逗号分隔" />
-                <input id="adminUploadPublisher" placeholder="出版社" />
-                <input id="adminUploadYear" type="number" placeholder="出版年份" />
-                <input id="adminUploadIsbn" placeholder="ISBN，可选" />
-                <input id="adminUploadPageCount" type="number" placeholder="页数，默认 240" value="240" />
-                <textarea id="adminUploadDescription" placeholder="简介，可选。会作为图书简介和试读文本兜底。"></textarea>
+
+            <div class="epub-import-panel">
+              <div class="epub-import-head">
+                <div>
+                  <h3>批量上传 EPUB 待入库</h3>
+                  <p>一次性选择多个 EPUB 文件，上传后所有文件会同时出现在左侧“待入库文件”列表；点击某本书后在右侧填写作者、分类、标签等信息，再确认入库。</p>
+                </div>
               </div>
-              <div class="admin-upload-actions">
-                <button class="primary" type="submit">上传并入库</button>
-                <button type="button" onclick="adminResetEpubUploadForm()">清空上传表单</button>
-                <span class="hint">支持 .epub；上传后会同步搜索索引和知识图谱。</span>
+              <div class="epub-import-actions">
+                <input id="adminBatchEpubFiles" name="files" type="file" accept=".epub,application/epub+zip" multiple onchange="adminPreviewSelectedEpubFiles()" />
+                <button id="adminStageEpubBtn" class="primary" onclick="adminStageEpubFiles()">批量上传到待入库</button>
+                <button onclick="adminCommitCurrentBatch()">批量确认全部入库</button>
               </div>
-            </form>
+              <div id="adminSelectedEpubPreview" class="epub-selected-preview"></div>
+              <div id="adminImportSummary" class="epub-batch-summary">请选择多个 EPUB 文件上传。</div>
+              <div class="epub-workbench">
+                <div class="epub-file-list">
+                  <h4>待入库文件</h4>
+                  <div id="adminImportList" class="epub-import-list"><div class="epub-editor-empty">还没有待入库文件</div></div>
+                </div>
+                <div class="epub-editor">
+                  <div id="adminImportEditorEmpty" class="epub-editor-empty">上传后，点击左侧任意 EPUB 文件，在这里编辑该书信息。</div>
+                  <form id="adminImportEditor" class="hidden" onsubmit="adminSaveImportItem(event)">
+                    <h4 id="adminImportEditorTitle">编辑待入库图书</h4>
+                    <input type="hidden" id="adminImportItemId" />
+                    <div class="epub-editor-grid">
+                      <input id="adminImportTitle" placeholder="书名" required />
+                      <input id="adminImportAuthors" placeholder="作者，多个用逗号分隔" />
+                      <input id="adminImportCategory" placeholder="分类，例如 科幻 / 文学 / 技术" />
+                      <input id="adminImportTags" placeholder="标签，多个用逗号分隔" />
+                      <input id="adminImportPublisher" placeholder="出版社" />
+                      <input id="adminImportYear" type="number" placeholder="出版年份" />
+                      <input id="adminImportIsbn" placeholder="ISBN，可选" />
+                      <input id="adminImportPages" type="number" placeholder="页数" value="240" />
+                      <input id="adminImportCoverUrl" placeholder="封面 URL，可选" />
+                      <input id="adminImportCoverFile" type="file" accept="image/*" title="上传封面图，可选" />
+                      <textarea id="adminImportDescription" placeholder="简介：用于图书详情、搜索和推荐解释"></textarea>
+                    </div>
+                    <div class="epub-editor-actions">
+                      <button class="primary" type="submit">保存当前图书信息</button>
+                      <button type="button" onclick="adminCommitCurrentImportItem()">确认入库当前图书</button>
+                      <button type="button" class="danger-btn" onclick="adminDeleteCurrentImportItem()">移除待入库文件</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
 
             <div id="adminBookList" class="admin-table"></div>
           </div>
