@@ -266,8 +266,8 @@ def update_book_rating(db: Session, book_id: int) -> None:
     values = ratings + comments
     book = db.get(Book, book_id)
     if book:
-        book.rating_count = len(values) / 2
-        book.avg_rating = round(sum(values) * 2 / len(values), 2) if values else 0.0
+        book.rating_count = len(values)
+        book.avg_rating = round(sum(values) / len(values), 2) if values else 0.0
         db.commit()
 
 

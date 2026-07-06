@@ -242,7 +242,7 @@ class SearchService:
         max_keyword = max([float(x.get("keyword_score") or 0.0) for x in keyword_payload.get("items", [])] or [1.0]) or 1.0
 
         def quality_score(card: dict[str, Any]) -> float:
-            rating = float(card.get("avg_rating") or 0.0) / 5.0
+            rating = float(card.get("avg_rating") or 0.0) / 10.0
             hot = float(card.get("hot_score") or 0.0)
             hot_norm = hot / (1.0 + abs(hot)) if hot else 0.0
             new_boost = 0.05 if card.get("is_new") else 0.0

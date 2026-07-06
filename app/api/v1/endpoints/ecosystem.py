@@ -96,9 +96,10 @@ def comments(book_id: int, db: Session = Depends(get_db), user: User | None = De
         own = next((c for c in rows if c.user_id == user.id), None)
         my_comment_id = own.id if own else None
     ratings = [c.rating for c in rows if c.rating]
-    distribution = {str(i): 0 for i in range(1, 6)}
+    distribution = {str(i): 0 for i in range(1, 11)}
     for rating in ratings:
-        distribution[str(int(round(rating)))] += 1
+        bucket = max(1, min(10, int(round(rating))))
+        distribution[str(bucket)] += 1
     avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else 0
     return {
         "items": [comment_card(c, liked=c.id in liked_ids) for c in rows],

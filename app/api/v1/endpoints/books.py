@@ -244,15 +244,13 @@ def hot_searches(limit: int = Query(10, ge=1, le=30), db: Session = Depends(get_
 
 
 @router.get("/{book_id}")
-def book_detail(book_id: int, db: Session = Depends(get_db)):
+def book_detail(book_id: int, include_graph: bool = Query(False), db: Session = Depends(get_db)):
     book = db.get(Book, book_id)
     if not book or book.is_deleted:
         raise HTTPException(404, "图书不存在")
-    book.view_count += 1
-    book.hot_score = (book.hot_score or 0) + 0.2
-    db.commit()
     data = book_card(book, include_description=True, include_purchase=True)
-    data["graph_relations"] = GraphService(db).subgraph(book_id, depth=1)
+    if include_graph:
+        data["graph_relations"] = GraphService(db).subgraph(book_id, depth=1)
     return data
 
 

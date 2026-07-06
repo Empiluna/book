@@ -97,6 +97,16 @@ function bookCard(b, eager=false){
   const priority = eager ? ' fetchpriority="high"' : '';
   return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
 }
+function bookCard(b, eager=false){
+  const id = b.id || b.book_id;
+  const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
+  const cover = b.cover_thumb_url || b.cover_url || '';
+  const loading = eager ? 'eager' : 'lazy';
+  const priority = eager ? ' fetchpriority="high"' : '';
+  const authors = (b.authors||[]).join('、') || b.author || '未知作者';
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${authors} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions"><button class="detail-action" onclick="event.stopPropagation(); openDetail(${id})">查看详情</button>${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+}
+
 async function recordFeedback(bookId, eventType, source='frontend'){
   if(!bookId) return;
   try{
@@ -218,13 +228,14 @@ async function recordReadingAction(bookId, status='reading', source='detail'){
 }
 function stars(value){
   const rating = Number(value || 0);
-  return Array.from({length:5}, (_, i)=>`<span class="${i < Math.round(rating) ? 'on' : ''}">★</span>`).join('');
+  const starRating = Math.round(rating / 2);
+  return Array.from({length:5}, (_, i)=>`<span class="${i < starRating ? 'on' : ''}">★</span>`).join('');
 }
 function reviewSummaryHtml(comments){
   const summary = comments.summary || {};
   const dist = summary.distribution || {};
   const max = Math.max(1, ...Object.values(dist).map(Number));
-  const rows = [5,4,3,2,1].map(n=>`<div class="rating-bar"><span>${n}星</span><i><b style="width:${((Number(dist[n]||0)/max)*100).toFixed(0)}%"></b></i><em>${dist[n]||0}</em></div>`).join('');
+  const rows = [10,9,8,7,6,5,4,3,2,1].map(n=>`<div class="rating-bar"><span>${n}分</span><i><b style="width:${((Number(dist[n]||0)/max)*100).toFixed(0)}%"></b></i><em>${dist[n]||0}</em></div>`).join('');
   return `<div class="review-summary"><div class="review-score"><b>${Number(summary.avg_rating||0).toFixed(1)}</b><div class="stars">${stars(summary.avg_rating)}</div><span>${summary.total||0} 条书评 · ${summary.rating_count||0} 个评分</span></div><div class="rating-bars">${rows}</div></div>`;
 }
 function reviewCardHtml(c, bookId){
@@ -241,7 +252,8 @@ function reviewCardHtml(c, bookId){
 function reviewsHtml(bookId, comments){
   const items = comments.items || [];
   const list = items.length ? items.map(c=>reviewCardHtml(c, bookId)).join('') : '<div class="empty-review">还没有书评，来写第一条吧。</div>';
-  return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating"><option value="5">5 星</option><option value="4">4 星</option><option value="3">3 星</option><option value="2">2 星</option><option value="1">1 星</option></select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
+  const ratingOptions = [10,9,8,7,6,5,4,3,2,1].map(n=>`<option value="${n}">${n} 分</option>`).join('');
+  return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating">${ratingOptions}</select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
 }
 async function openDetail(id){
   const b = await api(`/books/${id}`); activeBook=b;
@@ -252,6 +264,51 @@ async function openDetail(id){
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
   $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
   $('detailModal').classList.remove('hidden');
+}
+async function openDetail(id){
+  const detail = $('detailContent');
+  const modal = $('detailModal');
+  if(detail){
+    detail.innerHTML = '<div class="detail-loading">正在加载书籍详情...</div>';
+  }
+  modal?.classList.remove('hidden');
+  try{
+    const b = await api(`/books/${id}`);
+    activeBook = b;
+    recordFeedback(id, 'click', 'detail');
+    loadShelfState().then(refreshShelfButtons).catch(()=>{});
+    if(detail){
+      detail.innerHTML = `
+        <div class="detail-head">
+          <img class="detail-cover" src="${b.cover_url || b.cover_thumb_url || ''}">
+          <div>
+            <span class="pill">${b.category||'图书'}</span>
+            <h2>${b.title}</h2>
+            <p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p>
+            <div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+            <p>${b.description||''}</p>
+            <div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>
+            <div id="detailPurchaseLinks" class="detail-async-block">购书链接加载中...</div>
+          </div>
+        </div>
+        <div class="detail-recommend-section"><h3>你可能也喜欢</h3><div id="detailSimilarList" class="mini-list"><span class="meta">推荐加载中...</span></div></div>
+        <div id="detailReviewsWrap"><div class="detail-async-block">评论加载中...</div></div>`;
+      refreshShelfButtons();
+    }
+    const [simRes, commentsRes, purchaseRes] = await Promise.allSettled([
+      api(`/recommend/similar/${id}?limit=6`),
+      api(`/ecosystem/comments/${id}`),
+      api(`/ecosystem/purchase-links/${id}`)
+    ]);
+    const sim = simRes.status === 'fulfilled' ? simRes.value : {items:[]};
+    const comments = commentsRes.status === 'fulfilled' ? commentsRes.value : {items:[]};
+    const purchase = purchaseRes.status === 'fulfilled' ? purchaseRes.value : {links:[]};
+    if($('detailPurchaseLinks')) $('detailPurchaseLinks').outerHTML = purchaseChannelsHtml(b, purchase);
+    if($('detailSimilarList')) $('detailSimilarList').innerHTML = sim.items.map(miniItem).join('') || '暂无推荐';
+    if($('detailReviewsWrap')) $('detailReviewsWrap').outerHTML = reviewsHtml(b.id, comments);
+  }catch(e){
+    if(detail) detail.innerHTML = `<div class="detail-loading error">详情加载失败：${attr(e.message || '请稍后再试')}</div>`;
+  }
 }
 function closeDetail(){ $('detailModal').classList.add('hidden'); }
 async function openReader(id, startPage=1){
@@ -293,7 +350,7 @@ function scrollToReviews(){ const el=document.querySelector('#detailContent .rev
 async function submitReview(id){
   if(!token) return toast('请先登录');
   const content = $('reviewContent')?.value.trim();
-  const rating = Number($('reviewRating')?.value || 5);
+  const rating = Number($('reviewRating')?.value || 10);
   if(!content) return toast('请先写一点书评内容');
   await api(`/ecosystem/comments/${id}`, {method:'POST', body:JSON.stringify({content, rating})});
   toast('评论已发布');
@@ -309,7 +366,7 @@ async function editComment(commentId, bookId, oldContent, oldRating){
   if(!token) return toast('请先登录');
   const content = prompt('编辑书评', oldContent || '');
   if(!content) return;
-  const rating = Number(prompt('评分 1-5', oldRating || '5')) || null;
+  const rating = Number(prompt('评分 1-10', oldRating || '10')) || null;
   await api(`/ecosystem/comments/${commentId}`, {method:'PUT', body:JSON.stringify({content, rating})});
   toast('书评已更新');
   openDetail(bookId);

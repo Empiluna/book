@@ -248,14 +248,14 @@ class RecommendService:
         candidate: defaultdict[int, float] = defaultdict(float)
         seed_scores: dict[int, float] = {}
         if book_id:
-            seed_scores[book_id] = 5.0
+            seed_scores[book_id] = 10.0
         elif user:
             for r in self.db.query(UserRating).filter_by(user_id=user.id).all():
-                if r.rating >= 3.5:
+                if r.rating >= 7.0:
                     seed_scores[r.book_id] = r.rating
             if not seed_scores:
                 for bm in self.db.query(Bookmark).filter_by(user_id=user.id).limit(5).all():
-                    seed_scores[bm.book_id] = 4.0
+                    seed_scores[bm.book_id] = 8.0
         for seed, rating in seed_scores.items():
             for other, s in sim.get(seed, []):
                 if other != seed:
@@ -341,7 +341,7 @@ class RecommendService:
             if book.id not in interacted:
                 novelty += 0.04
             # Lower-hot but reasonably rated books get a small discovery boost.
-            if (book.avg_rating or 0) >= 4.0 and (book.hot_score or 0) < 5.0:
+            if (book.avg_rating or 0) >= 8.0 and (book.hot_score or 0) < 5.0:
                 novelty += 0.05
             row["score"] = float(row.get("score") or 0.0) + novelty
             row.setdefault("rerank", {})["novelty_score"] = round(novelty, 4)

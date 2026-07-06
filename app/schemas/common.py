@@ -41,7 +41,7 @@ class PasswordChangeRequest(BaseModel):
 
 
 class RatingRequest(BaseModel):
-    rating: float = Field(ge=0.5, le=5.0)
+    rating: float = Field(ge=1.0, le=10.0)
 
 
 class ProgressRequest(BaseModel):
@@ -66,12 +66,12 @@ class ShelfRenameRequest(BaseModel):
 
 class CommentCreate(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
-    rating: float | None = Field(default=None, ge=0.5, le=5.0)
+    rating: float | None = Field(default=None, ge=1.0, le=10.0)
 
 
 class CommentUpdate(BaseModel):
     content: str | None = Field(default=None, min_length=1, max_length=2000)
-    rating: float | None = Field(default=None, ge=0.5, le=5.0)
+    rating: float | None = Field(default=None, ge=1.0, le=10.0)
 
 
 class PurchaseLinkCreate(BaseModel):
