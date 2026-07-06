@@ -176,7 +176,28 @@ class FeedbackRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=1000)
+    message: str = Field(min_length=1, max_length=20000)
+
+
+class ManuscriptAssistRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=128)
+    genre: str | None = Field(default=None, max_length=64)
+    manuscript: str = Field(min_length=20, max_length=60000)
+
+
+class NovelGenerateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=128)
+    genre: str = Field(min_length=1, max_length=64)
+    requirement: str = Field(min_length=1, max_length=2000)
+    word_count: int = Field(default=1200, ge=300, le=12000)
+    reference_text: str | None = Field(default=None, max_length=60000)
+
+
+class ManuscriptSaveRequest(ManuscriptAssistRequest):
+    summary: str | None = Field(default=None, max_length=1200)
+    tags: list[str] = Field(default_factory=list)
+    layout_suggestions: list[str] = Field(default_factory=list)
+    save_to_shelf: bool = True
 
 
 class AdminUserStatusRequest(BaseModel):

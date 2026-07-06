@@ -65,11 +65,10 @@ def startup() -> None:
     try:
         if settings.SEED_ON_STARTUP:
             seed_database(db)
-        # Production-grade synchronization. Each service has strict mode flags.
-        from app.services.graph_service import GraphService
-        from app.services.search_service import SearchService
-        GraphService(db).sync_from_mysql()
-        SearchService(db).bulk_index_books()
+        # Graph sync and search indexing are heavyweight O(n^2) operations.
+        # Skip on startup; trigger manually from admin panel when needed:
+        #   admin panel -> 图谱管理 -> 同步图谱
+        #   admin panel -> 图书管理 -> 重建索引
     finally:
         db.close()
 

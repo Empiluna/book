@@ -17,6 +17,11 @@ settings = get_settings()
 
 SEMANTIC_MIN_SCORE = 0.20
 HYBRID_MIN_SCORE = 0.10
+ORIGINAL_CATEGORY = "用户原创"
+
+
+def _is_public_book(book: Book) -> bool:
+    return not book.is_deleted and book.category != ORIGINAL_CATEGORY
 
 
 def _book_document(book: Book) -> dict[str, Any]:
@@ -40,6 +45,9 @@ def _book_document(book: Book) -> dict[str, Any]:
     }
 
 
+_es_unavailable = False
+
+
 class SearchService:
     """Book search service.
 
@@ -54,16 +62,21 @@ class SearchService:
         self.index_name = settings.SEARCH_INDEX_NAME
         self.client = None
         self.last_error: str | None = None
-        if settings.ELASTICSEARCH_URL:
+        global _es_unavailable
+        if _es_unavailable or not settings.ELASTICSEARCH_URL:
+            pass
+        elif settings.ELASTICSEARCH_URL:
             try:
                 from elasticsearch import Elasticsearch
-                self.client = Elasticsearch(settings.ELASTICSEARCH_URL)
+                self.client = Elasticsearch(settings.ELASTICSEARCH_URL, request_timeout=3)
                 if not self.client.ping():
                     self.last_error = "ElasticSearch ping failed"
                     self.client = None
+                    _es_unavailable = True
             except Exception as exc:  # pragma: no cover - depends on external service
                 self.last_error = str(exc)
                 self.client = None
+                _es_unavailable = True
         if settings.REQUIRE_ELASTICSEARCH and not self.client:
             raise HTTPException(503, f"ElasticSearch 未连接：{self.last_error or '请启动ES并配置ELASTICSEARCH_URL'}")
 
@@ -129,10 +142,16 @@ class SearchService:
                 raise HTTPException(503, "ElasticSearch 未连接，无法写入索引")
             return
         self.ensure_index()
+        if book.category == ORIGINAL_CATEGORY:
+            try:
+                self.client.delete(index=self.index_name, id=book.id)
+            except Exception:
+                pass
+            return
         self.client.index(index=self.index_name, id=book.id, document=_book_document(book))
 
     def bulk_index_books(self) -> dict:
-        books = self.db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
+        books = self.db.query(Book).filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY)).all()  # noqa: E712
         if not self.client:
             if settings.REQUIRE_ELASTICSEARCH:
                 raise HTTPException(503, "ElasticSearch 未连接，无法批量索引")
@@ -258,7 +277,7 @@ class SearchService:
             card["semantic_score"] = round(row["semantic_score"], 4)
             card["quality_score"] = round(q_score, 4)
             card["source"] = "hybrid"
-            card["reason"] = "融合关键词 BM25/SQL 匹配、语义向量相似度和图书质量分生成排序。"
+            card["reason"] = "综合匹配"
             ranked.append(card)
         ranked.sort(key=lambda x: x.get("score") or 0.0, reverse=True)
         total = len(ranked)
@@ -284,6 +303,7 @@ class SearchService:
     def _search_es(self, q: str, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None, record: bool = True) -> dict:
         self.ensure_index()
         filters = []
+        filters.append({"bool": {"must_not": [{"term": {"category": ORIGINAL_CATEGORY}}]}})
         if category:
             filters.append({"term": {"category": primary_category(category)}})
         if tag:
@@ -318,7 +338,7 @@ class SearchService:
         hit_rows = hits.get("hits", [])
         ids = [int(h["_id"]) for h in hit_rows]
         scores = {int(h["_id"]): float(h.get("_score") or 0.0) for h in hit_rows}
-        books_by_id = {b.id: b for b in self.db.query(Book).filter(Book.id.in_(ids or [0])).all()}
+        books_by_id = {b.id: b for b in self.db.query(Book).filter(Book.id.in_(ids or [0]), or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY)).all()}
         items = []
         for i in ids:
             if i in books_by_id:
@@ -331,7 +351,7 @@ class SearchService:
         return {"items": items, "total": total, "page": page, "limit": limit, "search_backend": "elasticsearch", "index": self.index_name}
 
     def _search_sql(self, q: str | None, category: str | None, tag: str | None, author: str | None, sort: str, page: int, limit: int, user: User | None, record: bool = True) -> dict:
-        query = self.db.query(Book).filter(Book.is_deleted == False)  # noqa: E712
+        query = self.db.query(Book).filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))  # noqa: E712
         if q:
             terms = self._query_terms(q)
             conditions = []
@@ -394,7 +414,7 @@ class SearchService:
         return {"items": items, "total": len(books), "page": page, "limit": limit, "search_backend": "sql-fallback"}
 
     def _candidate_books(self, category: str | None = None, tag: str | None = None, author: str | None = None) -> list[Book]:
-        query = self.db.query(Book).filter(Book.is_deleted == False)  # noqa: E712
+        query = self.db.query(Book).filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))  # noqa: E712
         if category:
             query = query.filter(Book.category.isnot(None))
         books = query.all()

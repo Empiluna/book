@@ -29,6 +29,7 @@ from app.services.user_service import build_user_profile
 from app.utils.categories import primary_category
 
 settings = get_settings()
+ORIGINAL_CATEGORY = "用户原创"
 
 
 FEEDBACK_WEIGHTS: dict[str, float] = {
@@ -121,8 +122,12 @@ class RecommendService:
 
         return ids
 
+    @staticmethod
+    def _is_public_book(book: Book | None) -> bool:
+        return bool(book and not book.is_deleted and book.category != ORIGINAL_CATEGORY)
+
     def hot_scores(self, limit: int = 50) -> list[dict]:
-        books = self.db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
+        books = [b for b in self.db.query(Book).filter(Book.is_deleted == False).all() if self._is_public_book(b)]  # noqa: E712
         rows = []
         for b in books:
             comments = self.db.query(BookComment).filter_by(book_id=b.id, is_deleted=False).count()
@@ -136,6 +141,8 @@ class RecommendService:
     def new_scores(self, limit: int = 50) -> list[dict]:
         rows = []
         for b in self.db.query(Book).filter(Book.is_deleted == False).all():  # noqa: E712
+            if not self._is_public_book(b):
+                continue
             if b.is_new:
                 score = 1.0 + (b.avg_rating or 0) * 0.12 + (b.hot_score or 0) * 0.08
                 rows.append((b, score))
@@ -162,7 +169,7 @@ class RecommendService:
         rows = []
         for bid, data in sorted(scores.items(), key=lambda x: x[1]["score"], reverse=True)[:limit]:
             b = self.db.get(Book, bid)
-            if b and not b.is_deleted:
+            if self._is_public_book(b):
                 rows.append({"book": b, "score": self._norm(data["score"]), "source": "kg", "reason": self.graph.path_reason(data["paths"]), "paths": data["paths"]})
         return rows
 
@@ -174,7 +181,7 @@ class RecommendService:
         by_book = defaultdict(dict)
         for r in ratings:
             by_book[r.book_id][r.user_id] = r.rating
-        books = [b.id for b in self.db.query(Book).filter(Book.is_deleted == False).all()]  # noqa: E712
+        books = [b.id for b in self.db.query(Book).filter(Book.is_deleted == False).all() if self._is_public_book(b)]  # noqa: E712
         sim: dict[int, list[tuple[int, float]]] = {bid: [] for bid in books}
         if len(ratings) >= 6 and len(by_book) >= 2:
             for i, a in enumerate(books):
@@ -202,7 +209,7 @@ class RecommendService:
         return sim
 
     def _content_similarity(self) -> dict[int, list[tuple[int, float]]]:
-        books = self.db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
+        books = [b for b in self.db.query(Book).filter(Book.is_deleted == False).all() if self._is_public_book(b)]  # noqa: E712
         features: dict[int, set[str]] = {}
         for b in books:
             f = {f"cat:{b.category}", f"pub:{b.publisher_id}", f"series:{b.series_id}"}
@@ -240,7 +247,7 @@ class RecommendService:
         rows = []
         for bid, score in sorted(candidate.items(), key=lambda x: x[1], reverse=True)[:limit]:
             b = self.db.get(Book, bid)
-            if b and not b.is_deleted:
+            if self._is_public_book(b):
                 rows.append({"book": b, "score": self._norm(score), "source": "cf", "reason": "基于用户-图书评分矩阵计算的ItemCF相似推荐。"})
         return rows
 
@@ -414,7 +421,7 @@ class RecommendService:
             merged[b.id]["reasons"].append(r["reason"])
         for item in kg:
             b = self.db.get(Book, item["book_id"])
-            if b:
+            if self._is_public_book(b):
                 merged.setdefault(b.id, {"book": b, "score": 0.0, "sources": [], "reasons": [], "paths": []})
                 merged[b.id]["score"] += float(item.get("score") or 0) * 0.45
                 merged[b.id]["sources"].append("kg")
@@ -463,6 +470,8 @@ class RecommendService:
         books = query.all()
         scores = []
         for b in books:
+            if not self._is_public_book(b):
+                continue
             text = " ".join([b.title, b.description or "", b.category or "", b.difficulty or ""] + [a.name for a in b.authors] + [t.name for t in b.tags]).lower()
             s = 0.0
             for term in terms:

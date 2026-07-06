@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>知人知书 · 个性化荐书系统</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=shelf-clean-1" />
+  <link rel="stylesheet" href="/static/css/app.css?v=shelf-scroll-delete-1" />
 </head>
 <body>
   <div class="bg-orb orb-a"></div><div class="bg-orb orb-b"></div><div class="bg-orb orb-c"></div>
@@ -15,6 +15,7 @@
       <button class="nav" data-view="discover">搜索发现</button>
       <button class="nav" data-view="graph">知识图谱</button>
       <button class="nav" data-view="shelf">我的书架</button>
+      <button class="nav" data-view="original">AI小说工坊</button>
       <button class="nav" data-view="profile">个人画像</button>
       <button class="nav assistant-entry" type="button" onclick="openAssistant()">智能助手</button>
     </nav>
@@ -104,6 +105,32 @@
       <div class="panel glass shelf-panel"><div id="shelfGrid" class="shelf-grid"></div></div>
     </section>
 
+    <section id="original" class="view">
+      <div class="panel glass original-panel">
+        <div class="section-title compact">
+          <div>
+            <h3>AI 原创和排版辅助</h3>
+            <span>上传或粘贴自己的文稿，AI 自动生成简介、标签、排版建议，并保存为个人书架作品。</span>
+          </div>
+        </div>
+        <div class="original-grid">
+          <div class="original-editor">
+            <label>作品标题<input id="originalTitle" placeholder="例如：星海来信" maxlength="128" /></label>
+            <label>题材方向<input id="originalGenre" placeholder="例如：科幻、悬疑、成长、奇幻" maxlength="64" /></label>
+            <label>上传文稿<input id="originalFile" type="file" accept=".txt,.md,.markdown,.text" onchange="loadOriginalFile(event)" /></label>
+            <label>文稿正文<textarea id="originalText" rows="14" placeholder="在这里粘贴你的原创文稿，至少 20 个字。"></textarea></label>
+            <div class="original-actions">
+              <button onclick="saveOriginalWork()">保存到我的书架</button>
+            </div>
+          </div>
+          <div class="original-result">
+            <h4>AI 辅助结果</h4>
+            <div id="originalAssistResult" class="original-empty">上传或粘贴文稿后，点击生成即可看到简介、标签和排版建议。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="profile" class="view">
       <div class="split profile-split"><div class="panel glass"><h3>阅读统计</h3><div id="profileStats" class="stats-cards"></div><canvas id="trendCanvas" width="640" height="240"></canvas></div><div class="panel glass"><h3>兴趣画像</h3><div id="tagCloud" class="tag-cloud"></div><div id="profileBooks" class="mini-list"></div></div></div>
       <div class="panel glass history-panel"><div class="section-title compact"><h3>阅读历史记录</h3><span>按图书去重，展示最近阅读/收藏/评分行为</span></div><div id="historyList" class="mini-list"></div></div>
@@ -133,6 +160,6 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js?v=shelf-clean-1"></script>
+  <script src="/static/js/app.js?v=shelf-scroll-delete-1"></script>
 </body>
 </html>

@@ -9,8 +9,21 @@ let readerBookId = null;
 let graphBookOptions = [];
 let graphBookOptionsLoaded = false;
 let currentGraphData = null;
+let originalAssistState = null;
 
-function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
+function syncAuthFromStorage(){
+  const storedToken = localStorage.getItem('token') || '';
+  const storedUserRaw = localStorage.getItem('user') || 'null';
+  let storedUser = null;
+  try{ storedUser = JSON.parse(storedUserRaw); }catch(e){ storedUser = null; }
+  token = storedToken;
+  currentUser = storedUser;
+  return {token, currentUser};
+}
+function headers(){
+  syncAuthFromStorage();
+  return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'};
+}
 async function api(path, opts={}){
   const res = await fetch(API + path, {headers: headers(), ...opts});
   if(!res.ok){ let t = await res.text(); try{ t=JSON.parse(t).detail || t; }catch(e){} throw new Error(t || res.statusText); }
@@ -20,7 +33,7 @@ function $(id){ return document.getElementById(id); }
 function setTitle(t){ $('pageTitle').textContent = t; }
 function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),2600); }
 function isAdmin(){ return !!(currentUser && currentUser.is_admin); }
-function isLoggedIn(){ return !!(token && currentUser); }
+function isLoggedIn(){ syncAuthFromStorage(); return !!(token && currentUser); }
 function updateAdminVisibility(){
   const adminNav = document.querySelector('[data-view="admin"]');
   if(adminNav) adminNav.classList.toggle('hidden', !isAdmin());
@@ -111,6 +124,17 @@ function recordExposure(items, source='home'){
   });
 }
 function miniItem(b){ return `<div class="mini-item" onclick="openDetail(${b.id || b.book_id})"><div><b>${b.title}</b><br><span>${(b.authors||[]).join('、')||b.author||''} · ⭐ ${b.avg_rating||0}</span></div><span>${b.category||''}</span></div>`; }
+function shelfMiniItem(item, shelfName){
+  const b = item.book || item;
+  const id = b.id || b.book_id;
+  return `<div class="mini-item shelf-mini-item" onclick="openDetail(${id})">
+    <div><b>${attr(b.title || '未命名图书')}</b><br><span>${attr((b.authors||[]).join('、')||b.author||'')} · ⭐ ${b.avg_rating||0}</span></div>
+    <div class="shelf-mini-actions">
+      <span>${attr(b.category||'')}</span>
+      <button class="shelf-remove-btn" onclick="removeShelfBook(event, ${id}, '${jsString(shelfName)}')">删除</button>
+    </div>
+  </div>`;
+}
 function buildPurchaseChannels(book){
   const keyword = encodeURIComponent([book?.title, book?.author].filter(Boolean).join(' '));
   return [
@@ -158,7 +182,7 @@ async function loadBooks(q=''){
 }
 async function loadOptions(){
   const data = await api('/books/meta/options');
-  $('chips').innerHTML = [...data.categories.slice(0,8), ...data.tags.slice(0,12)].map(x=>`<button class="chip" onclick="searchByKeyword('${attr(x)}')">${x}</button>`).join('');
+  $('chips').innerHTML = [...new Set([...data.categories.slice(0,8), ...data.tags.slice(0,12)])].map(x=>`<button class="chip" onclick="searchByKeyword('${attr(x)}')">${x}</button>`).join('');
 }
 async function loadHotSearches(){
   const data = await api('/books/hot-searches?limit=10').catch(()=>({items:[]}));
@@ -903,6 +927,7 @@ async function loadGuestShelfPreview(){
 async function loadShelves(){
   const grid = $('shelfGrid');
   if(!grid) return;
+  syncAuthFromStorage();
   if(!token){
     await loadGuestShelfPreview();
     return;
@@ -910,6 +935,217 @@ async function loadShelves(){
   grid.classList.remove('guest-shelf-grid');
   const data=await api('/ecosystem/shelves');
   grid.innerHTML=data.shelves.map(s=>`<div class="shelf"><h4>${s.name} <span class="tag">${s.count}</span></h4><div class="mini-list">${s.books.slice(0,6).map(x=>miniItem(x.book)).join('')||'<span class="meta">暂无图书</span>'}</div></div>`).join('');
+}
+async function loadOriginalFile(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  if(file.size > 1024 * 1024){
+    toast('文稿文件请控制在 1MB 以内');
+    event.target.value = '';
+    return;
+  }
+  const text = await file.text();
+  if($('originalReference')) $('originalReference').value = text;
+  else if($('originalText')) $('originalText').value = text;
+  if($('originalTitle') && !$('originalTitle').value.trim()){
+    $('originalTitle').value = file.name.replace(/\.(txt|md|markdown|text)$/i, '').slice(0, 128);
+  }
+  originalAssistState = null;
+  renderOriginalAssist(null);
+}
+function setupOriginalWorkshop(){
+  const panel = document.querySelector('#original .original-panel');
+  if(!panel || panel.dataset.mode === 'novel') return;
+  panel.dataset.mode = 'novel';
+  panel.innerHTML = `
+    <div class="section-title compact">
+      <div>
+        <h3>AI小说工坊</h3>
+        <span>上传参考文档，填写题材方向、作品标题、具体需求和字数要求后，AI 可以生成小说，并保存为个人书架作品。</span>
+      </div>
+    </div>
+    <div class="original-grid">
+      <div class="original-editor">
+        <label>作品标题<input id="originalTitle" placeholder="例如：星海来信" maxlength="128" /></label>
+        <label>题材方向<input id="originalGenre" placeholder="例如：科幻、悬疑、成长、奇幻" maxlength="64" /></label>
+        <label>要求字数
+          <select id="originalWordCount">
+            <option value="800">短篇 600-1000 字</option>
+            <option value="1500" selected>标准短篇 1000-2000 字</option>
+            <option value="3000">中篇片段 2000-4000 字</option>
+            <option value="6000">长篇章节 4000-8000 字</option>
+            <option value="10000">长篇扩写 8000-12000 字</option>
+          </select>
+        </label>
+        <label>上传参考文档<input id="originalFile" type="file" accept=".txt,.md,.markdown,.text" onchange="loadOriginalFile(event)" /></label>
+        <label>参考文档<textarea id="originalReference" rows="7" placeholder="上传或粘贴参考设定、人物关系、世界观、故事片段等，可为空。"></textarea></label>
+        <label>具体需求<textarea id="originalRequirement" rows="5" placeholder="例如：主角是一名图书管理员，发现旧书可以通往不同星球；风格温柔但有悬念，结尾留下续作空间。"></textarea></label>
+        <label>生成正文<textarea id="originalText" rows="12" placeholder="点击生成小说后，正文会出现在这里；也可以手动修改后保存。"></textarea></label>
+        <div class="original-actions">
+          <button class="primary" onclick="generateOriginalNovel()">生成小说</button>
+          <button onclick="saveOriginalWork()">保存到我的书架</button>
+        </div>
+      </div>
+      <div class="original-result">
+        <h4>AI 辅助结果</h4>
+        <div id="originalAssistResult" class="original-empty">填写创作信息后点击生成小说，生成结果会出现在左侧正文框，并在这里展示简介、标签和排版建议。</div>
+        <div id="originalSaveProgress" class="original-save-progress hidden"><span></span><div><i></i></div></div>
+        <div id="originalLibrary" class="original-library"></div>
+      </div>
+    </div>`;
+  const textArea = $('originalText');
+  const oldTextLabel = textArea?.closest('label');
+  const resultPanel = panel.querySelector('.original-result');
+  if(textArea && oldTextLabel && resultPanel){
+    const generatedBox = document.createElement('div');
+    generatedBox.className = 'original-generated-box';
+    generatedBox.innerHTML = '<h4>生成正文</h4>';
+    generatedBox.appendChild(textArea);
+    oldTextLabel.remove();
+    resultPanel.appendChild(generatedBox);
+  }
+  loadOriginalLibrary();
+}
+function originalGeneratePayload(){
+  syncAuthFromStorage();
+  const title = $('originalTitle')?.value.trim() || '';
+  const genre = $('originalGenre')?.value.trim() || '';
+  const requirement = $('originalRequirement')?.value.trim() || '';
+  const reference_text = $('originalReference')?.value.trim() || '';
+  const allowedWordCounts = new Set([800, 1500, 3000, 6000, 10000]);
+  const selectedWordCount = Number($('originalWordCount')?.value || 1500);
+  const word_count = allowedWordCounts.has(selectedWordCount) ? selectedWordCount : 1500;
+  if(!token) throw new Error('请先登录后再使用原创工坊');
+  if(!title) throw new Error('请填写作品标题');
+  if(!genre) throw new Error('请填写题材方向');
+  if(!requirement) throw new Error('请填写具体需求');
+  return {title, genre, requirement, reference_text: reference_text || null, word_count};
+}
+function originalPayload(){
+  syncAuthFromStorage();
+  const title = $('originalTitle')?.value.trim() || '';
+  const genre = $('originalGenre')?.value.trim() || '';
+  const manuscript = $('originalText')?.value.trim() || '';
+  if(!token) throw new Error('请先登录后再使用原创工坊');
+  if(manuscript.length < 20) throw new Error('文稿正文至少需要 20 个字');
+  return {title:title || null, genre:genre || null, manuscript};
+}
+function renderOriginalAssist(assist){
+  const box = $('originalAssistResult');
+  if(!box) return;
+  if(!assist){
+    box.innerHTML = '<div class="original-empty">上传或粘贴文稿后，点击生成即可看到简介、标签和排版建议。</div>';
+    return;
+  }
+  const tags = (assist.tags || []).map(t=>`<span class="tag">${attr(t)}</span>`).join('');
+  const layout = (assist.layout_suggestions || []).map(x=>`<li>${attr(x)}</li>`).join('');
+  box.innerHTML = `
+    <div class="original-assist-card">
+      <div class="original-assist-head">
+        <span class="pill">${attr(assist.category || '用户原创')}</span>
+        <h4>${attr(assist.title || $('originalTitle')?.value || '未命名原创作品')}</h4>
+      </div>
+      <p>${attr(assist.summary || '暂无简介')}</p>
+      <div class="tags">${tags}</div>
+      <h5>排版建议</h5>
+      <ul>${layout || '<li>建议先生成辅助结果后再保存作品。</li>'}</ul>
+      ${assist.polished_opening ? `<h5>润色开头</h5><blockquote>${attr(assist.polished_opening)}</blockquote>` : ''}
+      <div class="original-save-tip">保存后会进入“原创作品”书架，并可在详情页在线阅读。</div>
+    </div>`;
+}
+async function loadOriginalLibrary(){
+  const box = $('originalLibrary');
+  if(!box) return;
+  syncAuthFromStorage();
+  if(!token){
+    box.innerHTML = '<div class="original-library-empty">登录后可以在这里查看已保存的 AI 小说。</div>';
+    return;
+  }
+  try{
+    const data = await api('/chat/original/mine');
+    const items = data.items || [];
+    box.innerHTML = `
+      <div class="original-library-head"><h4>我的AI小说</h4><span>${items.length} 篇</span></div>
+      <div class="original-library-list">
+        ${items.map(x=>{
+          const b = x.book || {};
+          return `<button class="original-library-item" onclick="openDetail(${b.id})"><b>${attr(b.title || '未命名作品')}</b><span>${attr((b.authors||[]).join('、') || b.author || '我')}</span></button>`;
+        }).join('') || '<div class="original-library-empty">还没有保存 AI 小说。</div>'}
+      </div>`;
+  }catch(e){
+    box.innerHTML = '<div class="original-library-empty">暂时无法加载 AI 小说列表。</div>';
+  }
+}
+function setOriginalSaveProgress(percent, text){
+  const box = $('originalSaveProgress');
+  if(!box) return;
+  box.classList.remove('hidden');
+  const label = box.querySelector('span');
+  const bar = box.querySelector('i');
+  if(label) label.textContent = text || `保存中 ${percent}%`;
+  if(bar) bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+}
+function hideOriginalSaveProgress(delay=900){
+  const box = $('originalSaveProgress');
+  if(!box) return;
+  setTimeout(()=>box.classList.add('hidden'), delay);
+}
+async function analyzeOriginal(){
+  try{
+    const payload = originalPayload();
+    $('originalAssistResult').innerHTML = '<div class="original-empty">AI 正在分析文稿，生成简介、标签和排版建议...</div>';
+    const data = await api('/chat/original/assist', {method:'POST', body:JSON.stringify(payload)});
+    originalAssistState = data.assist;
+    renderOriginalAssist(originalAssistState);
+    toast('文稿分析完成');
+  }catch(e){
+    renderOriginalAssist(null);
+    toast(e.message || '文稿分析失败');
+  }
+}
+async function generateOriginalNovel(){
+  try{
+    const payload = originalGeneratePayload();
+    $('originalAssistResult').innerHTML = '<div class="original-empty">AI 正在生成小说，请稍等。字数越多，等待时间越长...</div>';
+    const data = await api('/chat/original/generate', {method:'POST', body:JSON.stringify(payload)});
+    if($('originalText')) $('originalText').value = data.manuscript || '';
+    originalAssistState = data.assist;
+    renderOriginalAssist(originalAssistState);
+    toast('小说生成完成');
+  }catch(e){
+    toast(e.message || '生成小说失败');
+  }
+}
+async function saveOriginalWork(){
+  try{
+    const payload = originalPayload();
+    const assist = originalAssistState || {};
+    setOriginalSaveProgress(15, '正在准备作品信息...');
+    await new Promise(resolve=>setTimeout(resolve, 120));
+    setOriginalSaveProgress(45, '正在保存到书架...');
+    const data = await api('/chat/original/save', {
+      method:'POST',
+      body:JSON.stringify({
+        ...payload,
+        summary: assist.summary || null,
+        tags: assist.tags || [],
+        layout_suggestions: assist.layout_suggestions || [],
+        save_to_shelf: true
+      })
+    });
+    setOriginalSaveProgress(82, '正在刷新我的AI小说...');
+    originalAssistState = data.assist;
+    renderOriginalAssist(originalAssistState);
+    toast('原创作品已保存到书架');
+    await Promise.allSettled([loadShelfState(), loadShelves(), loadProfile(), loadOriginalLibrary()]);
+    setOriginalSaveProgress(100, '保存成功');
+    hideOriginalSaveProgress();
+    if(data.book?.id) openDetail(data.book.id);
+  }catch(e){
+    setOriginalSaveProgress(100, '保存失败');
+    hideOriginalSaveProgress(1400);
+    toast(e.message || '保存原创作品失败');
+  }
 }
 function progressText(value){
   const n = Number(value || 0);
@@ -1278,6 +1514,8 @@ function assistantMarkdown(text){
 }
 function cleanAssistantAnswer(text){
   let s = String(text || '').trim();
+  // Strip <think>...</think> blocks from reasoning models (MiniMax, DeepSeek, etc.)
+  s = s.replace(/<think[\s\S]*?<\/think>/gi, '');
   s = s.replace(
     /^\s*(book_rec|book_qa|function_qa|personal_qa|admin_help|kg_assist|out_of_scope)\s*[·|｜\-]\s*(LLM增强|本地回答|本地规则回答|规则回答|fallback|LLM|local)\s*[·|｜\-]\s*(user|admin|anonymous|guest)\s*\n*/i,
     ''
@@ -1463,7 +1701,35 @@ function openAssistantLegacy(){
   }
 }
 function updateSearchbarForView(view){ if($('topSearchbar')) $('topSearchbar').style.display = ['home','discover'].includes(view) ? 'flex' : 'none'; }
-async function loadAll(){ await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile()]); }
+async function loadShelves(){
+  const grid = $('shelfGrid');
+  if(!grid) return;
+  syncAuthFromStorage();
+  if(!token){
+    await loadGuestShelfPreview();
+    return;
+  }
+  grid.classList.remove('guest-shelf-grid');
+  const data = await api('/ecosystem/shelves');
+  grid.innerHTML = (data.shelves || []).map(s => `
+    <div class="shelf">
+      <h4>${attr(s.name)} <span class="tag">${s.count}</span></h4>
+      <div class="mini-list shelf-book-list">
+        ${(s.books || []).map(x => shelfMiniItem(x, s.name)).join('') || '<span class="meta">暂无图书</span>'}
+      </div>
+    </div>
+  `).join('');
+}
+async function removeShelfBook(event, bookId, shelfName){
+  event?.stopPropagation?.();
+  if(!token) return toast('请先登录');
+  if(!confirm(`确定从「${shelfName}」删除这本书吗？`)) return;
+  await api(`/ecosystem/shelves/book/${bookId}?shelf_name=${encodeURIComponent(shelfName)}`, {method:'DELETE'});
+  if(shelfState[bookId]) delete shelfState[bookId][shelfName];
+  toast('已从书架删除');
+  await Promise.allSettled([loadShelves(), loadShelfState(), loadProfile(), loadOriginalLibrary()]);
+}
+async function loadAll(){ setupOriginalWorkshop(); await loadShelfState(); await Promise.allSettled([loadMetrics(), loadRecommendations(), loadHot(), loadNew(), loadBooks(), loadOptions(), loadHotSearches(), ensureGraphBookOptions(), loadGraph(), loadShelves(), loadProfile(), loadOriginalLibrary()]); }
 
 function activateView(view){
   if(view === 'admin' && !isAdmin()){

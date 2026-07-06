@@ -18,7 +18,7 @@ class CacheClient:
         if settings.REDIS_URL:
             try:
                 import redis
-                self._redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+                self._redis = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1, socket_timeout=1)
                 self._redis.ping()
             except Exception:
                 self._redis = None

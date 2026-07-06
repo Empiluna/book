@@ -1,4 +1,4 @@
-const API = '/api/v1';
+﻿const API = '/api/v1';
 let token = localStorage.getItem('token') || '';
 let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let lastAdminDashboard = null;
@@ -139,14 +139,21 @@ async function sendAdminChat(){
   input.value = '';
   box.innerHTML += `<div class="bubble user">${html(message)}</div>`;
   box.scrollTop = box.scrollHeight;
+  const loadingMsg = document.createElement('div');
+  loadingMsg.className = 'bubble';
+  loadingMsg.textContent = '正在分析后台数据…';
+  box.appendChild(loadingMsg);
   try{
     await ensureAdminAssistantContext();
+    loadingMsg.textContent = '正在调用 AI 助手…';
     const context = JSON.stringify(buildAdminAssistantContext());
     const prompt = `请以管理员助手身份回答。你可以使用以下后台实时数据作为分析依据，数据是JSON：${context}\n回答要求：优先基于数据给出结论、异常点和可执行建议；如果问题与数据无关，再按图书管理、用户运营、评论审核、推荐策略、知识图谱和系统配置经验回答。\n管理员问题：${message}`;
     const data = await api('/chat/send', {method:'POST', body:JSON.stringify({message:prompt})});
+    loadingMsg.remove();
     const books = (data.books || []).slice(0, 3).map(b=>`<div class="mini-item"><b>${html(b.title)}</b><span>${html(b.reason || b.category || '')}</span></div>`).join('');
     box.innerHTML += `<div class="bubble">${html(data.answer || '我暂时没有得到有效回复。')}${books}</div>`;
   }catch(e){
+    loadingMsg.remove();
     box.innerHTML += `<div class="bubble">助手暂时不可用：${html(e.message || '请求失败')}</div>`;
   }
   box.scrollTop = box.scrollHeight;
@@ -654,3 +661,4 @@ $('adminAssistantBtn').onclick = openAdminAssistant;
 $('adminLoginPass').addEventListener('keydown', e=>{ if(e.key === 'Enter') adminLogin(); });
 $('adminChatInput')?.addEventListener('keydown', e=>{ if(e.key === 'Enter') sendAdminChat(); });
 loadAdmin();
+

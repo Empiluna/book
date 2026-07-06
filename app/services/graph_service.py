@@ -79,6 +79,8 @@ def _safe_rel_type(value: str) -> str:
     return value
 
 
+_neo4j_unavailable = False  # global cache: don't retry after first failure
+
 class GraphService:
     """Neo4j-first graph service with advanced semantic reasoning and SQL fallback.
 
@@ -92,18 +94,24 @@ class GraphService:
     def __init__(self, db: Session):
         self.db = db
         self._driver = None
-        if settings.NEO4J_URI:
+        global _neo4j_unavailable
+        if _neo4j_unavailable or not settings.NEO4J_URI:
+            pass  # skip, already known to be unavailable
+        elif settings.NEO4J_URI:
             try:
                 from neo4j import GraphDatabase
 
                 self._driver = GraphDatabase.driver(
                     settings.NEO4J_URI,
                     auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                    connection_timeout=3,
+                    max_connection_lifetime=30,
                 )
                 with self._driver.session() as session:
-                    session.run("RETURN 1")
+                    session.run("RETURN 1", timeout=3)
             except Exception as exc:
                 self._driver = None
+                _neo4j_unavailable = True
                 if settings.REQUIRE_NEO4J:
                     raise HTTPException(503, f"Neo4j 未连接：{exc}")
         elif settings.REQUIRE_NEO4J:
