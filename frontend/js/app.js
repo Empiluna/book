@@ -48,6 +48,7 @@ function updateUserBadge(){
   if($('adminBtn')) $('adminBtn').classList.toggle('hidden', loggedIn);
   if($('logoutBtn')) $('logoutBtn').classList.toggle('hidden', !loggedIn);
   updateAdminVisibility();
+  if(typeof refreshOriginalWorkshopAccess === 'function') refreshOriginalWorkshopAccess();
 }
 function logout(){
   token = ''; currentUser = null;
@@ -1017,57 +1018,106 @@ async function loadOriginalFile(event){
 }
 function setupOriginalWorkshop(){
   const panel = document.querySelector('#original .original-panel');
-  if(!panel || panel.dataset.mode === 'novel') return;
-  panel.dataset.mode = 'novel';
-  panel.innerHTML = `
-    <div class="section-title compact">
-      <div>
-        <h3>AI小说工坊</h3>
-        <span>上传参考文档，填写题材方向、作品标题、具体需求和字数要求后，AI 可以生成小说，并保存为个人书架作品。</span>
-      </div>
-    </div>
-    <div class="original-grid">
-      <div class="original-editor">
-        <label>作品标题<input id="originalTitle" placeholder="例如：星海来信" maxlength="128" /></label>
-        <label>题材方向<input id="originalGenre" placeholder="例如：科幻、悬疑、成长、奇幻" maxlength="64" /></label>
-        <label>要求字数
-          <select id="originalWordCount">
-            <option value="800">短篇 600-1000 字</option>
-            <option value="1500" selected>标准短篇 1000-2000 字</option>
-            <option value="3000">中篇片段 2000-4000 字</option>
-            <option value="6000">长篇章节 4000-8000 字</option>
-            <option value="10000">长篇扩写 8000-12000 字</option>
-          </select>
-        </label>
-        <label>上传参考文档<input id="originalFile" type="file" accept=".txt,.md,.markdown,.text" onchange="loadOriginalFile(event)" /></label>
-        <label>参考文档<textarea id="originalReference" rows="7" placeholder="上传或粘贴参考设定、人物关系、世界观、故事片段等，可为空。"></textarea></label>
-        <label>具体需求<textarea id="originalRequirement" rows="5" placeholder="例如：主角是一名图书管理员，发现旧书可以通往不同星球；风格温柔但有悬念，结尾留下续作空间。"></textarea></label>
-        <label>生成正文<textarea id="originalText" rows="12" placeholder="点击生成小说后，正文会出现在这里；也可以手动修改后保存。"></textarea></label>
-        <div class="original-actions">
-          <button class="primary" onclick="generateOriginalNovel()">生成小说</button>
-          <button onclick="saveOriginalWork()">保存到我的书架</button>
+  if(!panel) return;
+
+  if(panel.dataset.mode !== 'novel'){
+    panel.dataset.mode = 'novel';
+    panel.innerHTML = `
+      <div class="original-workshop">
+        <div class="original-grid">
+          <div class="original-editor original-card">
+            <div class="original-card-head">
+              <h4>创作信息</h4>
+              <span>填写基础设定后再生成</span>
+            </div>
+
+            <div class="original-form-grid">
+              <label>作品标题
+                <input data-original-field id="originalTitle" placeholder="例如：星海来信" maxlength="128" />
+              </label>
+              <label>题材方向
+                <input data-original-field id="originalGenre" placeholder="例如：科幻、悬疑、成长、奇幻" maxlength="64" />
+              </label>
+              <label>要求字数
+                <select data-original-field id="originalWordCount">
+                  <option value="800">短篇 600-1000 字</option>
+                  <option value="1500" selected>标准短篇 1000-2000 字</option>
+                  <option value="3000">中篇片段 2000-4000 字</option>
+                  <option value="6000">长篇章节 4000-8000 字</option>
+                  <option value="10000">长篇扩写 8000-12000 字</option>
+                </select>
+              </label>
+              <label>上传参考文档
+                <input data-original-field id="originalFile" type="file" accept=".txt,.md,.markdown,.text" onchange="loadOriginalFile(event)" />
+              </label>
+            </div>
+
+            <label>参考文档
+              <textarea data-original-field id="originalReference" rows="7" placeholder="上传或粘贴参考设定、人物关系、世界观、故事片段等，可为空。"></textarea>
+            </label>
+            <label>具体需求
+              <textarea data-original-field id="originalRequirement" rows="6" placeholder="例如：主角是一名图书管理员，发现旧书可以通往不同星球；风格温柔但有悬念，结尾留下续作空间。"></textarea>
+            </label>
+
+            <div class="original-actions">
+              <button class="primary" data-original-field onclick="generateOriginalNovel()">生成小说</button>
+              <button data-original-field onclick="saveOriginalWork()">保存到我的书架</button>
+            </div>
+          </div>
+
+          <div class="original-result">
+            <div class="original-card">
+              <div class="original-card-head">
+                <h4>AI 辅助结果</h4>
+                <span>简介、标签和排版建议</span>
+              </div>
+              <div id="originalAssistResult" class="original-empty">填写创作信息后点击生成小说，生成结果会在这里展示。</div>
+              <div id="originalSaveProgress" class="original-save-progress hidden"><span></span><div><i></i></div></div>
+            </div>
+
+            <div class="original-card original-generated-box">
+              <div class="original-card-head">
+                <h4>生成正文</h4>
+                <span>可手动修改后保存</span>
+              </div>
+              <textarea data-original-field id="originalText" rows="13" placeholder="点击生成小说后，正文会出现在这里；也可以手动修改后保存。"></textarea>
+            </div>
+
+            <div class="original-card">
+              <div id="originalLibrary" class="original-library"></div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="original-result">
-        <h4>AI 辅助结果</h4>
-        <div id="originalAssistResult" class="original-empty">填写创作信息后点击生成小说，生成结果会出现在左侧正文框，并在这里展示简介、标签和排版建议。</div>
-        <div id="originalSaveProgress" class="original-save-progress hidden"><span></span><div><i></i></div></div>
-        <div id="originalLibrary" class="original-library"></div>
-      </div>
-    </div>`;
-  const textArea = $('originalText');
-  const oldTextLabel = textArea?.closest('label');
-  const resultPanel = panel.querySelector('.original-result');
-  if(textArea && oldTextLabel && resultPanel){
-    const generatedBox = document.createElement('div');
-    generatedBox.className = 'original-generated-box';
-    generatedBox.innerHTML = '<h4>生成正文</h4>';
-    generatedBox.appendChild(textArea);
-    oldTextLabel.remove();
-    resultPanel.appendChild(generatedBox);
+
+        <div class="original-lock-mask hidden">
+          <div class="original-lock-card">
+            <div class="original-lock-icon">🔒</div>
+            <h4>登录后解锁 AI 创作</h4>
+            <p>登录后才能生成小说、保存作品到我的书架，并继续在线阅读和管理个人原创作品。</p>
+            <button class="primary" onclick="window.location.href='/login?mode=login&role=user'">去登录</button>
+          </div>
+        </div>
+      </div>`;
   }
+
+  refreshOriginalWorkshopAccess();
+  renderOriginalAssist(originalAssistState);
   loadOriginalLibrary();
 }
+
+function refreshOriginalWorkshopAccess(){
+  const panel = document.querySelector('#original .original-panel');
+  if(!panel) return;
+  syncAuthFromStorage();
+  const locked = !token;
+  panel.classList.toggle('original-locked', locked);
+  panel.querySelectorAll('[data-original-field]').forEach(el => {
+    el.disabled = locked;
+  });
+  const mask = panel.querySelector('.original-lock-mask');
+  if(mask) mask.classList.toggle('hidden', !locked);
+}
+
 function originalGeneratePayload(){
   syncAuthFromStorage();
   const title = $('originalTitle')?.value.trim() || '';
@@ -1096,7 +1146,7 @@ function renderOriginalAssist(assist){
   const box = $('originalAssistResult');
   if(!box) return;
   if(!assist){
-    box.innerHTML = '<div class="original-empty">上传或粘贴文稿后，点击生成即可看到简介、标签和排版建议。</div>';
+    box.textContent = '上传或粘贴文稿后，点击生成即可看到简介、标签和排版建议。';
     return;
   }
   const tags = (assist.tags || []).map(t=>`<span class="tag">${attr(t)}</span>`).join('');
@@ -1254,6 +1304,32 @@ async function loadHistory(){
     return `<div class="mini-item history-item" onclick="openDetail(${h.book.id})"><div class="history-main"><b>${h.book.title}</b><br><span>${(h.book.authors||[]).join('、')} · ${statusText[h.status]||h.status} · 已读 ${progressText(percent)} · 第 ${page} 页 · ${formatReadAt(h.read_at)}</span>${progressBarHtml(percent)}</div><button onclick="event.stopPropagation();continueReading(${h.book.id}, ${page})">继续阅读</button></div>`;
   }).join('') || '<span class="meta">暂无阅读历史。</span>';
 }
+function interestBubbleSize(weight, index=0){
+  const n = Math.max(0.18, Math.min(1.6, Number(weight || 0)));
+  return Math.round(58 + n * 66 + (index === 0 ? 14 : 0));
+}
+function interestBubbleFontSize(size, index=0){
+  const base = Math.round(size * (index === 0 ? 0.28 : 0.25));
+  return Math.max(15, Math.min(index === 0 ? 42 : 34, base));
+}
+function renderInterestProfile(profile){
+  const box = $('tagCloud');
+  if(!box) return;
+  const tags = (profile.tag_preferences || []).slice(0, 14);
+  if(!tags.length){
+    box.innerHTML = '<div class="interest-bubble-box"><span class="meta">继续阅读后会生成兴趣标签</span></div>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="interest-bubble-box">
+      ${tags.map((t, idx)=>{
+        const size = interestBubbleSize(t.weight, idx);
+        const fontSize = interestBubbleFontSize(size, idx);
+        return `<span class="interest-bubble ${idx === 0 ? 'primary' : ''}" style="--bubble-size:${size}px;--bubble-font:${fontSize}px;font-size:${fontSize}px">${attr(t.name)}</span>`;
+      }).join('')}
+    </div>`;
+}
+
 async function loadProfile(){
   if(!token){
     // 未登录状态下，不再显示空白大框，改成引导型占位内容
@@ -1344,12 +1420,8 @@ async function loadProfile(){
     stat('已完成图书',stats.completed_books) +
     stat('在读图书',stats.reading_books) +
     stat('书架数量',stats.shelf_count);
-
-  $('tagCloud').innerHTML = (profile.tag_preferences||[])
-    .map(t=>`<span class="cloud" style="font-size:${12+18*t.weight}px">${t.name}</span>`)
-    .join('');
-
-  $('profileBooks').innerHTML = (profile.recent_books||[])
+  renderInterestProfile(profile);
+$('profileBooks').innerHTML = (profile.recent_books||[])
     .slice(0,5)
     .map(miniItem)
     .join('');
@@ -1821,6 +1893,7 @@ function activateView(view){
   if(view==='graph') loadGraph();
   if(view==='shelf') loadShelves();
   if(view==='profile') loadProfile();
+  if(view==='original') setupOriginalWorkshop();
   if(view==='admin') loadAdmin();
 }
 
