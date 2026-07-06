@@ -1990,7 +1990,7 @@
 
 /* Stable book-card actions */
 .book-card{
-  grid-template-rows:auto;
+  grid-template-rows:1fr auto;
   min-height:184px !important;
 }
 
@@ -2011,27 +2011,30 @@
 }
 
 .book-card .card-actions{
+  grid-column:1/-1 !important;
   margin-top:auto !important;
-  display:grid !important;
-  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
-  gap:7px !important;
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  gap:5px !important;
   align-items:center !important;
+  justify-content:space-between !important;
 }
 
 .book-card .card-actions button,
 .book-card .card-actions .shelf-action{
-  width:100% !important;
+  width:auto !important;
+  flex:1 1 0 !important;
   height:34px !important;
   min-width:0 !important;
-  padding:0 8px !important;
+  padding:0 5px !important;
   display:inline-flex !important;
   align-items:center !important;
   justify-content:center !important;
   white-space:nowrap !important;
-  overflow:hidden !important;
-  text-overflow:ellipsis !important;
-  border-radius:999px !important;
-  font-size:12px !important;
+  overflow:visible !important;
+  text-overflow:clip !important;
+  border-radius:8px !important;
+  font-size:11px !important;
   line-height:1 !important;
 }
 
@@ -2069,11 +2072,12 @@
   }
 
   .book-card .card-actions{
-    grid-template-columns:1fr !important;
+    flex-wrap:wrap !important;
   }
 
   .book-card .card-actions button,
   .book-card .card-actions .shelf-action{
+    flex:1 1 100% !important;
     height:36px !important;
   }
 }
