@@ -2170,6 +2170,7 @@
   color:#475467 !important;
   line-height:1.7 !important;
 }
+
 #originalAssistResult.original-empty > .original-empty{
   border:0 !important;
   outline:0 !important;
@@ -2177,4 +2178,10 @@
   border-radius:0 !important;
   padding:0 !important;
   box-shadow:none !important;
+}
+
+/* Fix: center-book selector is only visible in manual graph mode. */
+#graph #graphBookPickerWrap.hidden,
+#graph .graph-toolbar label.hidden{
+  display:none !important;
 }

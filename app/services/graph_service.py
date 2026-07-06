@@ -977,6 +977,69 @@ class GraphService:
             ]
             return " ".join(parts).lower()
 
+        def book_category(book: Book) -> str:
+            return (book.category or "").strip()
+
+        def book_tags(book: Book) -> set[str]:
+            return {str(t.name).strip() for t in book.tags if str(t.name).strip()}
+
+        def cluster_book_gate(cluster_key: str, book: Book) -> bool:
+            """Decide whether a book is allowed to enter a user-facing interest cluster.
+
+            Keyword matching alone is too loose for demo data.  For example, a
+            science-fiction book may contain the word "文明", but it should not
+            be pushed into the "历史人文" cluster unless its category/tag really
+            indicates history or social science.  These gates make the graph
+            explanation closer to a product-level recommendation logic.
+            """
+            category = book_category(book)
+            tags = book_tags(book)
+            txt = book_text(book)
+
+            if cluster_key == "science_fiction":
+                return (
+                    category == "科幻"
+                    or bool(tags & {"科幻", "硬科幻", "宇宙", "太空", "外星文明", "机器人"})
+                    or any(x in txt for x in ["三体", "银河帝国", "火星", "外星", "太空"])
+                )
+            if cluster_key == "ai_tech":
+                return (
+                    category in {"技术", "计算机"}
+                    or bool(tags & {"人工智能", "机器学习", "深度学习", "Python", "算法", "编程", "计算机"})
+                )
+            if cluster_key == "literature_reality":
+                return (
+                    category in {"文学", "小说", "名著"}
+                    or bool(tags & {"文学", "小说", "现实主义", "名著", "外国文学", "中国文学"})
+                    or any(x in txt for x in ["余华", "活着", "许三观", "百年孤独", "平凡的世界"])
+                )
+            if cluster_key == "history_humanity":
+                # Do not classify ordinary sci-fi books as history only because
+                # they mention words like "文明" or "未来".
+                if category == "科幻" and not bool(tags & {"历史", "人类史", "文明史", "社会学", "哲学", "心理"}):
+                    return False
+                return (
+                    category in {"历史", "社科", "哲学", "心理", "社会学"}
+                    or bool(tags & {"历史", "人类", "文明史", "社会", "文化", "哲学", "心理", "社会学"})
+                    or any(x in txt for x in ["人类简史", "未来简史", "乌合之众", "中国史", "世界史"])
+                )
+            if cluster_key == "business_mind":
+                return (
+                    category in {"经济", "管理", "商业"}
+                    or bool(tags & {"经济", "商业", "管理", "投资", "营销", "决策"})
+                    or any(x in txt for x in ["穷查理", "置身事内", "影响力"])
+                )
+            return True
+
+        def cluster_hits(cluster: dict, book: Book) -> tuple[list[str], list[str]]:
+            """Return strong/all keyword hits after category gating."""
+            if not cluster_book_gate(cluster["key"], book):
+                return [], []
+            txt = book_text(book)
+            strong_hits = [kw for kw in cluster.get("strong_keywords", []) if kw.lower() in txt]
+            hits = [kw for kw in cluster.get("keywords", []) if kw.lower() in txt]
+            return strong_hits, hits
+
         center = "Profile:me"
         add_node(center, "我的阅读画像", "Profile", 54, {"role": "center"})
 
@@ -1020,9 +1083,9 @@ class GraphService:
             {
                 "key": "science_fiction",
                 "name": "科幻探索",
-                "keywords": ["科幻", "硬科幻", "宇宙", "外星", "太空", "火星", "银河", "星", "机器人", "时间", "文明", "未来"],
-                "strong_keywords": ["科幻", "硬科幻", "宇宙", "外星", "太空", "银河"],
-                "desc": "关注科幻、宇宙文明、未来想象和技术社会主题。",
+                "keywords": ["科幻", "硬科幻", "宇宙", "外星", "太空", "火星", "银河", "机器人", "时间", "未来", "三体"],
+                "strong_keywords": ["科幻", "硬科幻", "外星", "太空", "银河", "三体", "机器人"],
+                "desc": "关注科幻、宇宙探索、未来想象和技术社会主题。",
             },
             {
                 "key": "ai_tech",
@@ -1041,8 +1104,8 @@ class GraphService:
             {
                 "key": "history_humanity",
                 "name": "历史人文",
-                "keywords": ["历史", "人类", "文明", "社会", "文化", "未来简史", "人类简史", "哲学", "心理", "乌合之众"],
-                "strong_keywords": ["历史", "人类", "文明", "人类简史", "未来简史"],
+                "keywords": ["历史", "人类", "文明史", "社会", "文化", "未来简史", "人类简史", "哲学", "心理", "乌合之众"],
+                "strong_keywords": ["历史", "人类简史", "未来简史", "中国史", "世界史", "乌合之众"],
                 "desc": "关注历史、人文、社会心理和文明演化。",
             },
             {
@@ -1067,9 +1130,9 @@ class GraphService:
             keys = [k.lower() for k in c["keywords"]]
             strong_keys = [k.lower() for k in c.get("strong_keywords", [])]
             for b in seed_books:
-                txt = seed_texts[b.id]
-                strong_hit_count = sum(1 for k in strong_keys if k in txt)
-                weak_hit_count = sum(1 for k in keys if k in txt)
+                strong_hits, hits = cluster_hits(c, b)
+                strong_hit_count = len(strong_hits)
+                weak_hit_count = len(hits)
                 if strong_hit_count:
                     cluster_scores[c["key"]] += 1.4 + min(strong_hit_count, 3) * 0.45
                     if b.title not in cluster_evidence[c["key"]]:
@@ -1102,25 +1165,19 @@ class GraphService:
             ckey = f"Cluster:{c['key']}"
             cscore = cluster_scores[c["key"]]
             evidence = cluster_evidence.get(c["key"], [])[:4]
-            add_node(ckey, c["name"], "InterestCluster", 42, {"description": c["desc"], "evidence": evidence})
-            add_edge(center, ckey, "兴趣簇", "PROFILE_CLUSTER", max(0.5, min(cscore, 2.0)))
 
-            keys = [k.lower() for k in c["keywords"]]
             recs: list[tuple[float, Book, list[str]]] = []
             for b in all_books:
                 if b.id in seen_seed or b.id in used_rec_ids:
                     continue
-                txt = book_text(b)
-                hits = [kw for kw in c["keywords"] if kw.lower() in txt]
+                strong_hits, hits = cluster_hits(c, b)
                 if not hits:
                     continue
-                strong_hits = [kw for kw in c.get("strong_keywords", []) if kw.lower() in txt]
-                # Strong terms define the cluster.  Weak terms such as "文明" or "未来"
-                # help explanation, but should not push unrelated books ahead of truly
-                # matching books like 科幻/算法/文学 categories.
+                # Require a clear cluster match.  A single generic weak word should
+                # not make a book appear under an unrelated interest cluster.
                 if not strong_hits and len(hits) < 2:
                     continue
-                if c["key"] in {"ai_tech", "business_mind", "science_fiction"} and not strong_hits:
+                if c["key"] in {"ai_tech", "business_mind", "science_fiction", "history_humanity"} and not strong_hits:
                     continue
 
                 score = (
@@ -1133,7 +1190,12 @@ class GraphService:
             recs.sort(key=lambda x: x[0], reverse=True)
 
             if not recs:
+                # Do not draw an interest-cluster node if it cannot connect to any
+                # recommended book.  This keeps the visual graph explainable.
                 continue
+
+            add_node(ckey, c["name"], "InterestCluster", 42, {"description": c["desc"], "evidence": evidence})
+            add_edge(center, ckey, "兴趣簇", "PROFILE_CLUSTER", max(0.5, min(cscore, 2.0)))
 
             chosen = recs[:2]
             cluster_rec_titles: list[str] = []

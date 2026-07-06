@@ -15,8 +15,8 @@ from app.utils.categories import category_matches, primary_category
 
 settings = get_settings()
 
-SEMANTIC_MIN_SCORE = 0.20
-HYBRID_MIN_SCORE = 0.10
+SEMANTIC_MIN_SCORE = 0.14
+HYBRID_MIN_SCORE = 0.08
 ORIGINAL_CATEGORY = "用户原创"
 
 
@@ -194,8 +194,8 @@ class SearchService:
         ranked = EmbeddingService.rank_books(
             q,
             books,
-            limit=max(page * limit, 80),
-            min_score=SEMANTIC_MIN_SCORE,
+            limit=max(page * limit, 120),
+            min_score=None,
         )
         if sort == "rating":
             ranked.sort(key=lambda x: (x[1], x[0].avg_rating or 0), reverse=True)
@@ -205,21 +205,22 @@ class SearchService:
         start = (page - 1) * limit
         items = []
         for book, score in ranked[start:start + limit]:
-            card = book_card(book, score=score, reason="根据查询语义与图书标题、简介、标签、作者等内容的向量相似度匹配。", source="semantic")
+            card = book_card(book, score=score, reason=EmbeddingService.explain_match(q, book), source="semantic")
             card["semantic_score"] = score
             items.append(card)
         self._record(q, total, user)
-        return {"items": items, "total": total, "page": page, "limit": limit, "search_backend": "semantic-vector", "embedding_backend": "local-hashing-vector"}
+        return {"items": items, "total": total, "page": page, "limit": limit, "search_backend": "semantic-vector", "embedding_backend": "local-semantic-vector", "query_understanding": {"natural_language": EmbeddingService.query_is_natural_language(q)}}
 
     def hybrid_search(self, q: str, category: str | None = None, tag: str | None = None, author: str | None = None, sort: str = "hot", page: int = 1, limit: int = 24, user: User | None = None) -> dict:
-        pool_size = max(80, limit * 4)
+        natural_query = EmbeddingService.query_is_natural_language(q)
+        pool_size = max(120, limit * 6)
         keyword_payload = self._search_es(q, category, tag, author, sort="relevance", page=1, limit=pool_size, user=user, record=False) if self.client else self._search_sql(q, category, tag, author, sort="relevance", page=1, limit=pool_size, user=user, record=False)
         semantic_books = self._candidate_books(category, tag, author)
         semantic_ranked = EmbeddingService.rank_books(
             q,
             semantic_books,
             limit=pool_size,
-            min_score=SEMANTIC_MIN_SCORE,
+            min_score=None,
         )
         semantic_payload = {
             "items": [
@@ -227,7 +228,7 @@ class SearchService:
                     **book_card(
                         book,
                         score=score,
-                        reason="根据查询语义与图书标题、简介、标签、作者等内容的向量相似度匹配。",
+                        reason=EmbeddingService.explain_match(q, book),
                         source="semantic",
                     ),
                     "semantic_score": score,
@@ -248,6 +249,10 @@ class SearchService:
             new_boost = 0.05 if card.get("is_new") else 0.0
             return min(1.0, rating * 0.65 + hot_norm * 0.30 + new_boost)
 
+        # Natural-language queries should rely more on semantic intent; short exact queries should
+        # preserve keyword precision. This keeps both “三体” and “适合大学生入门人工智能的书” usable.
+        weights = {"keyword_bm25": 0.45, "semantic_vector": 0.50, "quality": 0.05} if natural_query else {"keyword_bm25": 0.62, "semantic_vector": 0.33, "quality": 0.05}
+
         for card in keyword_payload.get("items", []):
             bid = int(card["id"])
             raw = float(card.get("keyword_score") or 0.0)
@@ -258,12 +263,19 @@ class SearchService:
             bid = int(card["id"])
             row = merged.setdefault(bid, {"card": card, "keyword_norm": 0.0, "semantic_score": 0.0})
             row["semantic_score"] = max(row["semantic_score"], float(card.get("semantic_score") or card.get("score") or 0.0))
+            # Preserve semantic explanation when the same book also appears in keyword results.
+            if row["semantic_score"] > 0 and card.get("reason"):
+                row["semantic_reason"] = card.get("reason")
 
         ranked = []
         for row in merged.values():
             card = row["card"]
             q_score = quality_score(card)
-            final = 0.58 * row["keyword_norm"] + 0.37 * row["semantic_score"] + 0.05 * q_score
+            final = (
+                weights["keyword_bm25"] * row["keyword_norm"]
+                + weights["semantic_vector"] * row["semantic_score"]
+                + weights["quality"] * q_score
+            )
 
             keyword_hit = row["keyword_norm"] > 0
             semantic_hit = row["semantic_score"] >= SEMANTIC_MIN_SCORE
@@ -277,7 +289,12 @@ class SearchService:
             card["semantic_score"] = round(row["semantic_score"], 4)
             card["quality_score"] = round(q_score, 4)
             card["source"] = "hybrid"
-            card["reason"] = "综合匹配"
+            if keyword_hit and semantic_hit:
+                card["reason"] = row.get("semantic_reason") or "关键词和语义意图同时匹配。"
+            elif semantic_hit:
+                card["reason"] = row.get("semantic_reason") or "根据查询语义匹配。"
+            else:
+                card["reason"] = "关键词精确匹配。"
             ranked.append(card)
         ranked.sort(key=lambda x: x.get("score") or 0.0, reverse=True)
         total = len(ranked)
@@ -288,10 +305,11 @@ class SearchService:
             "total": total,
             "page": page,
             "limit": limit,
-            "search_backend": "hybrid-bm25-vector",
+            "search_backend": "hybrid-semantic-search",
             "lexical_backend": keyword_payload.get("search_backend"),
-            "embedding_backend": "local-hashing-vector",
-            "fusion_weights": {"keyword_bm25": 0.58, "semantic_vector": 0.37, "quality": 0.05},
+            "embedding_backend": "local-semantic-vector",
+            "query_understanding": {"natural_language": natural_query},
+            "fusion_weights": weights,
         }
 
     def _record(self, keyword: str | None, total: int, user: User | None) -> None:
@@ -435,7 +453,16 @@ class SearchService:
         return {"items": items, "total": len(books), "page": page, "limit": limit, "search_backend": "sql-fallback"}
 
     def _candidate_books(self, category: str | None = None, tag: str | None = None, author: str | None = None) -> list[Book]:
-        query = self.db.query(Book).filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))  # noqa: E712
+        query = (
+            self.db.query(Book)
+            .options(
+                selectinload(Book.authors),
+                selectinload(Book.tags),
+                selectinload(Book.publisher),
+                selectinload(Book.series),
+            )
+            .filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))
+        )  # noqa: E712
         if category:
             query = query.filter(Book.category.isnot(None))
         books = query.all()

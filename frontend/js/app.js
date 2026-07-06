@@ -186,10 +186,24 @@ async function loadMetrics(){
 async function loadRecommendations(){ const data = await api('/recommend/home?limit=16'); currentBooks = data.items; $('recommendGrid').innerHTML = data.items.map(b => bookCard(b, true)).join(''); refreshShelfButtons(); recordExposure(data.items, 'home'); populateGraphBookSelect(); }
 async function loadHot(){ const data = await api('/recommend/hot?limit=8'); $('hotList').innerHTML = data.items.map(miniItem).join(''); }
 async function loadNew(){ const data = await api('/recommend/new?limit=8'); $('newList').innerHTML = data.items.map(miniItem).join(''); }
+function searchBackendLabel(backend){
+  const labels = {
+    'hybrid-semantic-search': '混合语义搜索',
+    'hybrid-bm25-vector': '混合语义搜索',
+    'semantic-vector': '语义搜索',
+    'local-semantic-vector': '本地语义向量',
+    'local-hashing-vector': '本地语义向量',
+    'elasticsearch': '全文检索',
+    'sql-fallback': '基础搜索'
+  };
+  return labels[backend] || backend || '搜索';
+}
 async function loadBooks(q=''){
   const data = await api('/books' + (q ? `?q=${encodeURIComponent(q)}&limit=40&mode=hybrid` : '?limit=40'));
   currentBooks = data.items;
-  $('resultHint').textContent = `找到 ${data.total} 本相关图书 · ${data.search_backend}`;
+  const backendLabel = searchBackendLabel(data.search_backend);
+  const semanticHint = q ? (data.query_understanding?.natural_language ? ' · 已理解自然语言意图' : ' · 已融合关键词与语义') : '';
+  $('resultHint').textContent = `找到 ${data.total} 本相关图书 · ${backendLabel}${semanticHint}`;
   $('bookGrid').innerHTML = data.items.map(bookCard).join('');
   refreshShelfButtons();
   recordExposure(data.items, q ? 'search' : 'discover');
