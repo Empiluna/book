@@ -97,18 +97,26 @@ function bookCard(b, eager=false){
   const cover = b.cover_thumb_url || b.cover_url || '';
   const loading = eager ? 'eager' : 'lazy';
   const priority = eager ? ' fetchpriority="high"' : '';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}${b.rating_count ? ` (${b.rating_count}评)` : ''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
-}
-function bookCard(b, eager=false){
-  const id = b.id || b.book_id;
-  const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
-  const cover = b.cover_thumb_url || b.cover_url || '';
-  const loading = eager ? 'eager' : 'lazy';
-  const priority = eager ? ' fetchpriority="high"' : '';
   const authors = (b.authors||[]).join('、') || b.author || '未知作者';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${authors} · ${b.category||''} · ⭐${b.avg_rating||0}${b.rating_count ? ` (${b.rating_count}评)` : ''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}</div><div class="card-actions"><button class="detail-action" onclick="event.stopPropagation(); openDetail(${id})">查看详情</button>${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></article>`;
+  const rawTitle = b.title || '';
+  const displayTitle = rawTitle.length > 7 ? rawTitle.slice(0,7) + '...' : rawTitle;
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})">
+    <img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'">
+    <div class="book-info">
+      <div class="book-card-header">
+        <h4 class="book-card-title" title="${attr(rawTitle)}">${attr(displayTitle)}</h4>
+      </div>
+      <p class="meta">${authors} · ${b.category||''} · ⭐${b.avg_rating||0}</p>
+      <div class="tags">${tags}</div>
+      ${b.reason?`<p class="reason">${b.reason}</p>`:''}
+    </div>
+    <div class="card-actions">
+      <button class="detail-action" onclick="event.stopPropagation(); openDetail(${id})">查看详情</button>
+      ${shelfButton(id,'想读')}
+      <button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button>
+    </div>
+  </article>`;
 }
-
 async function recordFeedback(bookId, eventType, source='frontend'){
   if(!bookId) return;
   try{
