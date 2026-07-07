@@ -9,6 +9,7 @@ let readerBookId = null;
 let graphBookOptions = [];
 let graphBookOptionsLoaded = false;
 let currentGraphData = null;
+let graphResponseCache = {};
 let originalAssistState = null;
 
 function syncAuthFromStorage(){
@@ -96,7 +97,7 @@ function bookCard(b, eager=false){
   const cover = b.cover_thumb_url || b.cover_url || '';
   const loading = eager ? 'eager' : 'lazy';
   const priority = eager ? ' fetchpriority="high"' : '';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}${b.rating_count ? ` (${b.rating_count}评)` : ''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
 }
 function bookCard(b, eager=false){
   const id = b.id || b.book_id;
@@ -105,7 +106,7 @@ function bookCard(b, eager=false){
   const loading = eager ? 'eager' : 'lazy';
   const priority = eager ? ' fetchpriority="high"' : '';
   const authors = (b.authors||[]).join('、') || b.author || '未知作者';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${authors} · ${b.category||''} · ⭐${b.avg_rating||0}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}</div><div class="card-actions"><button class="detail-action" onclick="event.stopPropagation(); openDetail(${id})">查看详情</button>${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></article>`;
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${authors} · ${b.category||''} · ⭐${b.avg_rating||0}${b.rating_count ? ` (${b.rating_count}评)` : ''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}</div><div class="card-actions"><button class="detail-action" onclick="event.stopPropagation(); openDetail(${id})">查看详情</button>${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></article>`;
 }
 
 async function recordFeedback(bookId, eventType, source='frontend'){
@@ -176,16 +177,34 @@ async function login(user='demo', pass='demo123', openAdmin=false){
 async function loadMetrics(){
   const dash = token ? await api('/admin/dashboard').catch(()=>null) : null;
   const gs = await api('/graph/stats').catch(()=>({}));
+  const ps = !dash ? await api('/public/stats').catch(()=>null) : null;
   if($('mBooks')){
-    $('mBooks').textContent = dash?.cards?.books ?? gs.books ?? '--';
+    $('mBooks').textContent = dash?.cards?.books ?? gs.books ?? ps?.books ?? '--';
   }
   if($('mComments')){
-    $('mComments').textContent = dash?.cards?.comments ?? '--';
+    $('mComments').textContent = dash?.cards?.comments ?? ps?.comments ?? '--';
   }
 }
-async function loadRecommendations(){ const data = await api('/recommend/home?limit=16'); currentBooks = data.items; $('recommendGrid').innerHTML = data.items.map(b => bookCard(b, true)).join(''); refreshShelfButtons(); recordExposure(data.items, 'home'); populateGraphBookSelect(); }
-async function loadHot(){ const data = await api('/recommend/hot?limit=8'); $('hotList').innerHTML = data.items.map(miniItem).join(''); }
-async function loadNew(){ const data = await api('/recommend/new?limit=8'); $('newList').innerHTML = data.items.map(miniItem).join(''); }
+async function loadRecommendations(force=false){
+  const grid = $('recommendGrid');
+  if(force && grid) grid.innerHTML = '<div class="detail-async-block">正在刷新推荐...</div>';
+  const data = await api('/recommend/home?limit=16' + (force ? `&refresh=1&t=${Date.now()}` : ''));
+  currentBooks = data.items || [];
+  if(grid) grid.innerHTML = currentBooks.map(b => bookCard(b, true)).join('');
+  refreshShelfButtons();
+  recordExposure(currentBooks, force ? 'home_refresh' : 'home');
+  populateGraphBookSelect();
+}
+async function loadHot(force=false){
+  if(force && $('hotList')) $('hotList').innerHTML = '<span class="meta">正在刷新...</span>';
+  const data = await api('/recommend/hot?limit=8' + (force ? `&refresh=1&t=${Date.now()}` : ''));
+  $('hotList').innerHTML = data.items.map(miniItem).join('');
+}
+async function loadNew(force=false){
+  if(force && $('newList')) $('newList').innerHTML = '<span class="meta">正在刷新...</span>';
+  const data = await api('/recommend/new?limit=8' + (force ? `&refresh=1&t=${Date.now()}` : ''));
+  $('newList').innerHTML = data.items.map(miniItem).join('');
+}
 function searchBackendLabel(backend){
   const labels = {
     'hybrid-semantic-search': '混合语义搜索',
@@ -265,10 +284,23 @@ function reviewCardHtml(c, bookId){
   </article>`;
 }
 function reviewsHtml(bookId, comments){
+  if(comments && comments.error){
+    return `<section id="detailReviewsWrap" class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>评论加载失败</span></div><div class="empty-review">评论加载失败：${attr(comments.error)}</div></section>`;
+  }
   const items = comments.items || [];
   const list = items.length ? items.map(c=>reviewCardHtml(c, bookId)).join('') : '<div class="empty-review">还没有书评，来写第一条吧。</div>';
   const ratingOptions = [10,9,8,7,6,5,4,3,2,1].map(n=>`<option value="${n}">${n} 分</option>`).join('');
   return `<section class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating">${ratingOptions}</select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
+}
+function reviewsHtml(bookId, comments){
+  if(comments && comments.error){
+    return `<section id="detailReviewsWrap" class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>评论加载失败</span></div><div class="empty-review">评论加载失败：${attr(comments.error)}</div></section>`;
+  }
+  comments = comments || {items:[], summary:{}};
+  const items = comments.items || [];
+  const list = items.length ? items.map(c=>reviewCardHtml(c, bookId)).join('') : '<div class="empty-review">暂无评论，来写第一条吧。</div>';
+  const ratingOptions = [10,9,8,7,6,5,4,3,2,1].map(n=>`<option value="${n}">${n} 分</option>`).join('');
+  return `<section id="detailReviewsWrap" class="reviews-section"><div class="section-title compact"><h3>书评社区</h3><span>读者评分、短评和精选讨论</span></div>${reviewSummaryHtml(comments)}<div class="review-compose"><div><b>写一条书评</b><span>分享读后感，也可以顺手给本书评分。</span></div><select id="reviewRating">${ratingOptions}</select><textarea id="reviewContent" placeholder="这本书哪里打动了你？适合推荐给谁？"></textarea><button class="primary" onclick="submitReview(${bookId})">发布书评</button></div><div class="review-list">${list}</div></section>`;
 }
 async function openDetail(id){
   const b = await api(`/books/${id}`); activeBook=b;
@@ -316,7 +348,7 @@ async function openDetail(id){
       api(`/ecosystem/purchase-links/${id}`)
     ]);
     const sim = simRes.status === 'fulfilled' ? simRes.value : {items:[]};
-    const comments = commentsRes.status === 'fulfilled' ? commentsRes.value : {items:[]};
+    const comments = commentsRes.status === 'fulfilled' ? commentsRes.value : {items:[], error: commentsRes.reason?.message || '评论接口请求失败'};
     const purchase = purchaseRes.status === 'fulfilled' ? purchaseRes.value : {links:[]};
     if($('detailPurchaseLinks')) $('detailPurchaseLinks').outerHTML = purchaseChannelsHtml(b, purchase);
     if($('detailSimilarList')) $('detailSimilarList').innerHTML = sim.items.map(miniItem).join('') || '暂无推荐';
@@ -597,7 +629,10 @@ async function loadGraph(){
   }
   let path = `/graph/profile-graph?mode=${encodeURIComponent(mode)}&limit=${limit}&depth=2`;
   if(mode === 'manual') path += `&book_id=${manualId}`;
-  const data = await api(path);
+  if($('graphInfo')) $('graphInfo').innerHTML = '<div class="graph-side-card"><h4>图谱加载中</h4><p class="meta">正在生成节点和推荐路径...</p></div>';
+  if($('graphSvg') && !graphResponseCache[path]) $('graphSvg').innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#64748b">图谱加载中...</text>';
+  const data = graphResponseCache[path] || await api(path);
+  graphResponseCache[path] = data;
   $('graphTitle').textContent = data.title || (mode === 'profile' ? '我的画像图谱' : '中心图书图谱');
   $('graphSubtitle').textContent = mode === 'profile'
     ? '以用户画像为中心，综合多个兴趣种子进行知识图谱推理'

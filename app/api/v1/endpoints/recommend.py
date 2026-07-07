@@ -14,8 +14,13 @@ router = APIRouter(prefix="/recommend", tags=["模块三 · 个性化推荐"])
 
 
 @router.get("/home")
-def home(limit: int = Query(20, ge=1, le=50), db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
-    return RecommendService(db).hybrid(user, limit=limit, scene="home")
+def home(
+    limit: int = Query(20, ge=1, le=50),
+    refresh: bool = Query(False),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+):
+    return RecommendService(db).hybrid(user, limit=limit, scene="home", force_refresh=refresh)
 
 
 @router.get("/guess-you-like")
@@ -29,14 +34,24 @@ def similar(book_id: int, limit: int = Query(12, ge=1, le=30), db: Session = Dep
 
 
 @router.get("/hot")
-def hot(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
-    rows = RecommendService(db).hot_scores(limit)
+def hot(limit: int = Query(20, ge=1, le=100), refresh: bool = Query(False), db: Session = Depends(get_db)):
+    service = RecommendService(db)
+    rows = service.hot_scores(max(limit * 5, limit) if refresh else limit)
+    if refresh and len(rows) > limit:
+        import random
+        random.shuffle(rows)
+        rows = rows[:limit]
     return {"items": [book_card(r["book"], score=r["score"], reason=r["reason"], source="hot") for r in rows]}
 
 
 @router.get("/new")
-def new(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
-    rows = RecommendService(db).new_scores(limit)
+def new(limit: int = Query(20, ge=1, le=100), refresh: bool = Query(False), db: Session = Depends(get_db)):
+    service = RecommendService(db)
+    rows = service.new_scores(max(limit * 5, limit) if refresh else limit)
+    if refresh and len(rows) > limit:
+        import random
+        random.shuffle(rows)
+        rows = rows[:limit]
     return {"items": [book_card(r["book"], score=r["score"], reason=r["reason"], source="new") for r in rows]}
 
 

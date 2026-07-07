@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_optional, require_admin
+from app.core.cache import cache
 from app.core.database import get_db
 from app.models import User
 from app.schemas import GraphEntityCreate, GraphPathRequest, GraphRelationCreate
@@ -33,7 +34,14 @@ def profile_graph(
     db: Session = Depends(get_db),
 ):
     """用户侧图谱：默认以“我的阅读画像”为中心，也可切换最近阅读/高分图书/手动选择图书。"""
-    return GraphService(db).profile_graph(user, mode=mode, book_id=book_id, depth=depth, limit=limit)
+    user_id = user.id if user else 0
+    cache_key = f"profile_graph:{user_id}:{mode}:{book_id or 0}:{depth}:{limit}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+    result = GraphService(db).profile_graph(user, mode=mode, book_id=book_id, depth=depth, limit=limit)
+    cache.set(cache_key, result, ttl=60)
+    return result
 
 
 @router.get("/explain/{source_id}/{target_id}")

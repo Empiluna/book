@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
+from app.core.cache import cache
 from app.core.security import create_access_token, hash_password, is_email, validate_password_strength, verify_password
 from app.models import (
     Author,
@@ -25,10 +26,18 @@ from app.models import (
     User,
     UserRating,
 )
-from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card, user_card
 from app.utils.categories import primary_category
 from app.utils.search_terms import is_valid_search_keyword
+
+
+def _profile_cache_key(user_id: int) -> str:
+    return f"user_profile:{user_id}"
+
+
+def clear_user_profile_cache(user_id: int | None) -> None:
+    if user_id:
+        cache.delete(_profile_cache_key(user_id))
 
 DEFAULT_SHELVES = [("想读", "want_to_read"), ("在读", "reading"), ("已读", "read")]
 
@@ -332,9 +341,7 @@ def _apply_search_interest(
         if x[0]
     ]
     semantic_nodes = db.query(SemanticNode).all()
-    candidate_books = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
-
-    for idx, s in enumerate(searches[:20]):
+    for idx, s in enumerate(searches[:8]):
         keyword = (s.keyword or "").strip()
         if not keyword:
             continue
@@ -368,11 +375,16 @@ def _apply_search_interest(
             elif node.node_type in {"Keyword", "Topic"}:
                 tag_counter[name] += 0.5 * decay
 
-        for book, score in EmbeddingService.rank_books(keyword, candidate_books, limit=5, min_score=0.08):
-            mark(book, 0.6 * decay * max(float(score), 0.3))
+        # Keep profile rebuilding cheap for homepage/profile graph rendering.
+        # Full semantic ranking is handled by the search endpoint itself.
 
 
 def build_user_profile(db: Session, user: User) -> dict[str, Any]:
+    cache_key = _profile_cache_key(user.id)
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
     ratings = db.query(UserRating).filter_by(user_id=user.id).all()
     bookmarks = db.query(Bookmark).filter_by(user_id=user.id).all()
     progresses = db.query(ReadingProgress).filter_by(user_id=user.id).all()
@@ -481,7 +493,7 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
         if len(recent_books) >= 10:
             break
 
-    return {
+    result = {
         "user": user_card(user),
         "tag_preferences": tag_preferences,
         "tag_weights": {x["name"]: x["weight"] for x in tag_preferences},
@@ -495,6 +507,8 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
         "unique_behavior_books": len(book_weights),
         "updated_at": datetime.utcnow().isoformat(),
     }
+    cache.set(cache_key, result, ttl=120)
+    return result
 
 
 def reading_stats(db: Session, user: User) -> dict[str, Any]:

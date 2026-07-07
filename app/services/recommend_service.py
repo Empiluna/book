@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import random
 import re
 from collections import Counter, defaultdict
 from typing import Any
@@ -383,7 +384,133 @@ class RecommendService:
                 author_count[author.name] += 1
         return selected
 
-    def hybrid(self, user: User | None, limit: int = 20, scene: str = "home") -> dict:
+    def fast_home(self, user: User, limit: int = 20, scene: str = "home", force_refresh: bool = False) -> dict:
+        """Return login-home recommendations without blocking on KG/profile graph work.
+
+        The full hybrid pipeline is still useful for deeper recommendation pages, but
+        the home screen needs cards quickly so covers can start downloading. This
+        lightweight pass personalizes hot/new candidates using recent user signals.
+        """
+        cache_key = f"recommend:fast_home:{user.id}:{limit}"
+        cached = None if force_refresh else cache.get(cache_key)
+        if cached:
+            return cached
+
+        excluded = self._excluded_book_ids(user)
+        seed_ids: set[int] = set()
+        seed_weights: defaultdict[int, float] = defaultdict(float)
+
+        for r in self.db.query(UserRating).filter_by(user_id=user.id).all():
+            if r.rating >= 7.0:
+                seed_ids.add(r.book_id)
+                seed_weights[r.book_id] = max(seed_weights[r.book_id], float(r.rating or 0) / 10.0)
+        for bm in self.db.query(Bookmark).filter_by(user_id=user.id).limit(30).all():
+            seed_ids.add(bm.book_id)
+            seed_weights[bm.book_id] = max(seed_weights[bm.book_id], 0.8 if bm.reading_status in {"read", "reading"} else 0.45)
+        for p in self.db.query(ReadingProgress).filter_by(user_id=user.id).limit(30).all():
+            if p.progress_percent and p.progress_percent > 0:
+                seed_ids.add(p.book_id)
+                seed_weights[p.book_id] = max(seed_weights[p.book_id], 0.5 + min(float(p.progress_percent or 0), 100.0) / 200.0)
+        for h in (
+            self.db.query(ReadingHistory)
+            .filter_by(user_id=user.id)
+            .order_by(ReadingHistory.read_at.desc())
+            .limit(30)
+            .all()
+        ):
+            seed_ids.add(h.book_id)
+            seed_weights[h.book_id] = max(seed_weights[h.book_id], 0.65 if h.status in {"read", "reading"} else 0.35)
+
+        seed_books = []
+        if seed_ids:
+            seed_books = (
+                self.db.query(Book)
+                .options(selectinload(Book.authors), selectinload(Book.tags))
+                .filter(Book.id.in_(seed_ids), Book.is_deleted == False)
+                .all()
+            )  # noqa: E712
+
+        tag_pref: Counter[str] = Counter()
+        author_pref: Counter[str] = Counter()
+        category_pref: Counter[str] = Counter()
+        for book in seed_books:
+            weight = seed_weights.get(book.id, 0.4)
+            for tag in book.tags:
+                tag_pref[tag.name] += weight
+            for author in book.authors:
+                author_pref[author.name] += weight
+            category = primary_category(book.category)
+            if category:
+                category_pref[category] += weight
+
+        candidates: dict[int, dict] = {}
+        for row in self.hot_scores(limit=80):
+            book = row["book"]
+            candidates.setdefault(book.id, {"book": book, "score": 0.0, "sources": [], "reasons": [], "paths": []})
+            candidates[book.id]["score"] += float(row["score"]) * 0.64
+            candidates[book.id]["sources"].append("hot")
+            candidates[book.id]["reasons"].append(row["reason"])
+        for row in self.new_scores(limit=80):
+            book = row["book"]
+            candidates.setdefault(book.id, {"book": book, "score": 0.0, "sources": [], "reasons": [], "paths": []})
+            candidates[book.id]["score"] += float(row["score"]) * 0.24
+            candidates[book.id]["sources"].append("new")
+            candidates[book.id]["reasons"].append(row["reason"])
+
+        rows = []
+        for book_id, row in candidates.items():
+            if book_id in excluded:
+                continue
+            book: Book = row["book"]
+            affinity = 0.0
+            category = primary_category(book.category)
+            if category:
+                affinity += min(float(category_pref.get(category, 0.0)), 3.0) * 0.045
+            affinity += min(sum(float(tag_pref.get(t.name, 0.0)) for t in book.tags), 3.0) * 0.04
+            affinity += min(sum(float(author_pref.get(a.name, 0.0)) for a in book.authors), 2.0) * 0.05
+            if affinity:
+                row["sources"].append("profile")
+                row["reasons"].append("根据你的书架、评分和阅读记录做了轻量个性化重排。")
+            row["score"] = float(row["score"] or 0.0) + affinity
+            if force_refresh:
+                row["score"] += random.uniform(-0.035, 0.065)
+            rows.append(row)
+
+        if not rows:
+            rows = list(candidates.values())
+
+        rows.sort(key=lambda x: x["score"], reverse=True)
+        if force_refresh and len(rows) > limit:
+            pool = rows[: min(len(rows), max(limit * 6, 72))]
+            random.shuffle(pool)
+            rows = pool[: max(limit * 3, 30)]
+        else:
+            rows = rows[: max(limit * 3, 30)]
+        rows = self.rerank_with_user_feedback(rows, user)
+        rows = self.rerank_with_novelty(rows, user)
+        rows = self.rerank_with_diversity(rows, limit=limit)
+
+        items = []
+        for x in rows:
+            card = book_card(x["book"], score=x["score"], reason=self.generate_reason(x), source="+".join(sorted(set(x["sources"]))), paths=x["paths"])
+            card["base_score"] = round(float(x.get("base_score", x.get("score", 0.0))), 4)
+            card["rerank"] = x.get("rerank", {})
+            items.append(card)
+
+        result = {
+            "scene": scene,
+            "weights": {"hot": 0.64, "new": 0.24, "profile": 0.12},
+            "items": items,
+            "total": len(items),
+            "rerank_strategy": "fast_home_profile + online_feedback + novelty + diversity",
+        }
+        if not force_refresh:
+            cache.set(cache_key, result, ttl=45)
+        return result
+
+    def hybrid(self, user: User | None, limit: int = 20, scene: str = "home", force_refresh: bool = False) -> dict:
+        if user and scene == "home":
+            return self.fast_home(user, limit=limit, scene=scene, force_refresh=force_refresh)
         weights = get_weights(self.db)
         excluded = self._excluded_book_ids(user)
         sources = {
@@ -411,6 +538,10 @@ class RecommendService:
                 b = r["book"]
                 merged.setdefault(b.id, {"book": b, "score": r["score"] * 0.5, "sources": [r["source"]], "reasons": [r["reason"]], "paths": []})
         ranked = sorted(merged.values(), key=lambda x: x["score"], reverse=True)
+        if force_refresh and len(ranked) > limit:
+            pool = ranked[: min(len(ranked), max(limit * 6, 72))]
+            random.shuffle(pool)
+            ranked = pool[: max(limit * 3, 30)]
         ranked = self.rerank_with_user_feedback(ranked, user)
         ranked = self.rerank_with_novelty(ranked, user)
         ranked = self.rerank_with_diversity(ranked, limit=limit)

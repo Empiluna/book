@@ -1,7 +1,8 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import admin, ai_chat, books, ecosystem, graph, recommend, user
+from app.api.v1.endpoints import admin, ai_chat, books, ecosystem, graph, public_stats, recommend, user
 
 api_router = APIRouter()
+api_router.include_router(public_stats.router)
 api_router.include_router(books.router)
 api_router.include_router(user.router)
 api_router.include_router(graph.router)
