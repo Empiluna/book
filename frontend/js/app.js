@@ -143,10 +143,16 @@ function miniItem(b){ return `<div class="mini-item" onclick="openDetail(${b.id 
 function shelfMiniItem(item, shelfName){
   const b = item.book || item;
   const id = b.id || b.book_id;
-  return `<div class="mini-item shelf-mini-item" onclick="openDetail(${id})">
-    <div><b>${attr(b.title || '未命名图书')}</b><br><span>${attr((b.authors||[]).join('、')||b.author||'')} · ⭐ ${b.avg_rating||0}</span></div>
+  const cover = b.cover_thumb_url || b.cover_url || '';
+  const authors = (b.authors||[]).join('、') || b.author || '';
+  return `<div class="mini-item shelf-mini-item shelf-book-card" onclick="openDetail(${id})">
+    <img class="shelf-book-cover" src="${attr(cover)}" loading="lazy" decoding="async" alt="${attr(b.title || '')}" onerror="this.src=''; this.classList.add('empty-cover')">
+    <div class="shelf-book-info">
+      <b title="${attr(b.title || '')}">${attr(b.title || '未命名图书')}</b>
+      <span>${attr(authors)} · ⭐ ${b.avg_rating||0}</span>
+      <em>${attr(b.category||'图书')}</em>
+    </div>
     <div class="shelf-mini-actions">
-      <span>${attr(b.category||'')}</span>
       <button class="shelf-remove-btn" onclick="removeShelfBook(event, ${id}, '${jsString(shelfName)}')">删除</button>
     </div>
   </div>`;

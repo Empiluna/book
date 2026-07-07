@@ -31,8 +31,17 @@ def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dic
                     )
                 )
 
-    text = book.trial_text or book.description or "暂无试读内容。"
-    chunks = [text[i:i + 560] for i in range(0, len(text), 560)] or ["暂无试读内容。"]
+    has_ebook_resource = bool(book.ebook_epub_url or book.ebook_pdf_url)
+    text = book.trial_text or ""
+    if not has_ebook_resource:
+        trial_text = (book.trial_text or "").strip()
+        description = (book.description or "").strip()
+        # Many imported rows copied the description into trial_text. Do not expose
+        # those summaries as if they were full readable content.
+        if not trial_text or trial_text == description or len(trial_text) < 2000:
+            text = ""
+    text = text or "暂无可阅读正文。"
+    chunks = [text[i:i + 560] for i in range(0, len(text), 560)] or ["暂无可阅读正文。"]
     allowed_pages = 99999  # unlimited reading
 
     return {
