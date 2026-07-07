@@ -17,6 +17,7 @@ from app.models import Author, Book, Publisher, PurchaseLink, Series, Tag  # noq
 from app.services.graph_service import GraphService  # noqa: E402
 from app.services.search_service import SearchService  # noqa: E402
 from app.services.seed import seed_database  # noqa: E402
+from app.utils.tagging import clean_tag, dedupe, normalize_tags, split_terms  # noqa: E402
 
 
 def _clean(value: Any) -> str | None:
@@ -27,11 +28,7 @@ def _clean(value: Any) -> str | None:
 
 
 def _as_list(value: Any) -> list[str]:
-    if not value:
-        return []
-    if isinstance(value, list):
-        return [str(x).strip() for x in value if str(x).strip()]
-    return [x.strip() for x in str(value).replace("，", ",").replace("、", ",").split(",") if x.strip()]
+    return split_terms(value)
 
 
 def _get_or_create(db: Session, model, name: str):
@@ -119,6 +116,11 @@ def normalize_book(raw: dict[str, Any]) -> dict[str, Any]:
     if not title:
         raise ValueError("缺少 title")
 
+    description = _clean(raw.get("summary") or raw.get("description")) or "暂无简介"
+    raw_tags = raw.get("tags") or raw.get("tag")
+    raw_category = raw.get("category")
+    tags = normalize_tags(raw_tags, raw_category, title, description)
+
     return {
         "title": title,
         "subtitle": _clean(raw.get("subtitle")),
@@ -126,13 +128,13 @@ def normalize_book(raw: dict[str, Any]) -> dict[str, Any]:
         "authors": _as_list(raw.get("authors") or raw.get("author")),
         "publisher": _clean(raw.get("publisher")),
         "series": _clean(raw.get("series")),
-        "tags": _as_list(raw.get("tags") or raw.get("tag")),
-        "category": _clean(raw.get("category")) or (_as_list(raw.get("tags")) or [None])[0],
+        "tags": tags,
+        "category": tags[0] if tags else None,
         "publication_year": _safe_int(raw.get("publish_year") or raw.get("publication_year")),
         "page_count": _safe_int(raw.get("pages") or raw.get("page_count")) or 240,
         "avg_rating": _safe_float(raw.get("score") or raw.get("avg_rating")) or 0.0,
         "rating_count": _safe_int(raw.get("votes") or raw.get("rating_count")) or 0,
-        "description": _clean(raw.get("summary") or raw.get("description")) or "暂无简介",
+        "description": description,
         "cover_url": _clean(raw.get("image_path") or raw.get("cover_url") or raw.get("image_url")),
         "source_url": _clean(raw.get("source_url")),
         "price": _safe_float(raw.get("price")),
@@ -174,8 +176,9 @@ def upsert_book(db: Session, item: dict[str, Any]) -> Book:
     authors = data["authors"] or ["未知作者"]
     book.authors = [_get_or_create(db, Author, name) for name in authors[:6]]
 
-    tags = data["tags"] or ([data["category"]] if data["category"] else [])
-    book.tags = [_get_or_create(db, Tag, name) for name in tags[:12]]
+    tags = [clean_tag(name) for name in (data["tags"] or [])]
+    tags = [name for name in tags if name]
+    book.tags = [_get_or_create(db, Tag, name) for name in dedupe(tags)[:8]]
 
     db.flush()
 

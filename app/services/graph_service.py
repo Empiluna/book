@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models import Author, Book, GraphRelation, Publisher, SemanticNode, Series, Tag
 from app.services.serializers import book_card
+from app.utils.tagging import book_tag_names, clean_tag, main_tag
 
 settings = get_settings()
 
@@ -161,7 +162,8 @@ class GraphService:
             if book.series:
                 self._add_relation("Book", book.id, "BELONGS_TO_SERIES", "Series", book.series.id, 0.6)
             for tag in book.tags:
-                self._add_relation("Book", book.id, "TAGGED_AS", "Tag", tag.id, 0.8)
+                if clean_tag(tag.name):
+                    self._add_relation("Book", book.id, "TAGGED_AS", "Tag", tag.id, 0.8)
 
         self._create_semantic_relations(books)
         self._create_content_similar_relations(books)
@@ -195,7 +197,7 @@ class GraphService:
                     "MERGE (b:Book {id:$id}) SET b.title=$title,b.category=$category,b.difficulty=$difficulty,b.isbn=$isbn,b.score=$score",
                     id=book.id,
                     title=book.title,
-                    category=book.category,
+                    category=main_tag(book) or book.category,
                     difficulty=book.difficulty,
                     isbn=book.isbn,
                     score=book.avg_rating,
@@ -207,7 +209,10 @@ class GraphService:
                 if book.series:
                     session.run("MERGE (s:Series {id:$id}) SET s.name=$name", id=book.series.id, name=book.series.name)
                 for tag in book.tags:
-                    session.run("MERGE (t:Tag {id:$id}) SET t.name=$name,t.category=$category", id=tag.id, name=tag.name, category=tag.category)
+                    clean_name = clean_tag(tag.name)
+                    if not clean_name:
+                        continue
+                    session.run("MERGE (t:Tag {id:$id}) SET t.name=$name,t.category=$category", id=tag.id, name=clean_name, category=tag.category)
 
             for node in self.db.query(SemanticNode).all():
                 label = node.node_type if node.node_type in SEMANTIC_LABELS else "Keyword"
@@ -278,56 +283,8 @@ class GraphService:
                 node = self._semantic_node("Keyword", keyword, "内容关键词")
                 self._add_relation("Book", book.id, "HAS_KEYWORD", "Keyword", node.id, 0.55)
 
-    def _field_for_book(self, book: Book) -> str:
-        category = book.category or "通识阅读"
-        tags = {t.name for t in book.tags}
-        if category == "技术" or {"人工智能", "机器学习", "深度学习", "Python", "算法", "编程"} & tags:
-            return "人工智能与计算机"
-        if category == "科幻" or {"科幻", "宇宙", "物理"} & tags:
-            return "科幻与未来想象"
-        if category in {"文学", "设计"}:
-            return "文学艺术与审美"
-        if category in {"历史", "社科"}:
-            return "历史文明与社会科学"
-        if category in {"经济", "管理"}:
-            return "经济管理与商业决策"
-        if category == "心理" or "心理" in tags:
-            return "心理行为与社会认知"
-        return f"{category}通识"
-
-    def _audiences_for_book(self, book: Book) -> list[str]:
-        tags = {t.name for t in book.tags}
-        category = book.category or ""
-        text = f"{book.title} {book.description or ''} {' '.join(tags)}"
-        out: list[str] = []
-        if category == "技术" or {"人工智能", "机器学习", "深度学习", "Python", "算法", "编程"} & tags:
-            out.append("计算机学习者")
-            if "入门" in tags or book.difficulty == "入门" or "入门" in text:
-                out.append("零基础入门者")
-            if {"人工智能", "机器学习", "深度学习"} & tags:
-                out.append("AI入门者")
-            if {"编程", "软件工程", "代码质量"} & tags:
-                out.append("软件工程实践者")
-        if category == "科幻" or "科幻" in tags:
-            out += ["科幻爱好者", "想象力阅读者"]
-            if {"宇宙", "物理", "战争"} & tags:
-                out.append("硬科幻读者")
-        if category == "文学":
-            out.append("文学阅读者")
-            if "现实主义" in tags:
-                out.append("现实主义文学读者")
-        if category in {"历史", "社科"}:
-            out.append("通识阅读者")
-            if {"文明", "历史", "人类"} & tags:
-                out.append("文明研究读者")
-        if category in {"经济", "管理"} or {"投资", "商业", "经济", "管理"} & tags:
-            out += ["商业与经济读者", "决策管理学习者"]
-        if category == "心理" or "心理" in tags:
-            out.append("心理与行为研究读者")
-        return list(dict.fromkeys(out or ["大众读者"]))[:4]
-
     def _topics_for_book(self, book: Book) -> list[str]:
-        tags = {t.name for t in book.tags}
+        tags = set(book_tag_names(book))
         text = f"{book.title} {book.description or ''} {' '.join(tags)}"
         topics: list[str] = []
         if {"科幻", "宇宙"} & tags or "宇宙" in text:
@@ -352,7 +309,7 @@ class GraphService:
         return list(dict.fromkeys(topics))[:6]
 
     def _keywords_for_book(self, book: Book) -> list[str]:
-        tags = [t.name for t in book.tags]
+        tags = book_tag_names(book)
         text = f"{book.title} {book.description or ''} {' '.join(tags)}"
         controlled = [
             "宇宙", "文明", "外星文明", "人工智能", "机器学习", "深度学习", "Python", "算法",
@@ -361,6 +318,53 @@ class GraphService:
         out = [x for x in controlled if x in text]
         out.extend(tags[:4])
         return list(dict.fromkeys(out))[:8]
+
+    def _field_for_book(self, book: Book) -> str:
+        tags = set(book_tag_names(book))
+        tag = main_tag(book) or "通识"
+        if {"人工智能", "机器学习", "深度学习", "Python", "算法", "编程", "计算机"} & tags:
+            return "人工智能与计算机"
+        if {"科幻", "硬科幻", "宇宙", "物理", "太空"} & tags:
+            return "科幻与未来想象"
+        if {"文学", "小说", "名著", "散文", "现实主义", "设计"} & tags:
+            return "文学艺术与审美"
+        if {"历史", "传记", "人文", "社会", "社科"} & tags:
+            return "历史文明与社会科学"
+        if {"经济", "金融", "管理", "商业", "投资"} & tags:
+            return "经济管理与商业决策"
+        if {"心理", "治愈", "情绪", "自我成长"} & tags:
+            return "心理行为与社会认知"
+        return f"{tag}通识"
+
+    def _audiences_for_book(self, book: Book) -> list[str]:
+        tags = set(book_tag_names(book))
+        text = f"{book.title} {book.description or ''} {' '.join(tags)}"
+        out: list[str] = []
+        if {"人工智能", "机器学习", "深度学习", "Python", "算法", "编程", "计算机"} & tags:
+            out.append("计算机学习者")
+            if "入门" in tags or book.difficulty == "入门" or "入门" in text:
+                out.append("零基础入门者")
+            if {"人工智能", "机器学习", "深度学习"} & tags:
+                out.append("AI入门者")
+            if {"编程", "软件工程", "代码质量"} & tags:
+                out.append("软件工程实践者")
+        if {"科幻", "硬科幻", "宇宙", "物理", "太空"} & tags:
+            out += ["科幻爱好者", "想象力阅读者"]
+            if {"宇宙", "物理", "战争"} & tags:
+                out.append("硬科幻读者")
+        if {"文学", "小说", "名著", "散文"} & tags:
+            out.append("文学阅读者")
+            if "现实主义" in tags:
+                out.append("现实主义文学读者")
+        if {"历史", "传记", "人文", "社会", "社科"} & tags:
+            out.append("通识阅读者")
+            if {"文明", "历史", "人类"} & tags:
+                out.append("文明研究读者")
+        if {"投资", "商业", "经济", "管理", "金融"} & tags:
+            out += ["商业与经济读者", "决策管理学习者"]
+        if {"心理", "治愈", "情绪", "自我成长"} & tags:
+            out.append("心理与行为研究读者")
+        return list(dict.fromkeys(out or ["大众读者"]))[:4]
 
     def _create_content_similar_relations(self, books: list[Book]) -> None:
         semantic_features = self._book_semantic_features()
@@ -409,7 +413,7 @@ class GraphService:
 
         # Learning path for technical books: introductory books become prerequisites for advanced books.
         tech_books = [b for b in books if self._field_for_book(b) == "人工智能与计算机"]
-        intros = [b for b in tech_books if b.difficulty == "入门" or any(t.name == "入门" for t in b.tags)]
+        intros = [b for b in tech_books if b.difficulty == "入门" or "入门" in book_tag_names(b)]
         advanced = [b for b in tech_books if b not in intros]
         for intro in intros:
             intro_topics = set(self._topics_for_book(intro))
@@ -417,7 +421,9 @@ class GraphService:
                 if intro.id == adv.id:
                     continue
                 overlap = intro_topics & set(self._topics_for_book(adv))
-                if overlap or intro.category == adv.category:
+                intro_tag = main_tag(intro)
+                adv_tag = main_tag(adv)
+                if overlap or (intro_tag and adv_tag and intro_tag == adv_tag):
                     self._add_relation("Book", intro.id, "PREREQUISITE_OF", "Book", adv.id, 0.82)
                     self._add_relation("Book", intro.id, "NEXT_READ", "Book", adv.id, 0.78)
 
@@ -526,9 +532,14 @@ class GraphService:
         for author in source.authors:
             for b in author.books:
                 add(b, "same_author", [author.name])
+        source_tag_names = set(book_tag_names(source))
         for tag in source.tags:
+            clean_name = clean_tag(tag.name)
+            if not clean_name or clean_name not in source_tag_names:
+                continue
             for b in tag.books:
-                add(b, "same_tag", [tag.name])
+                if clean_name in book_tag_names(b):
+                    add(b, "same_tag", [clean_name])
         if source.series:
             for b in source.series.books:
                 add(b, "same_series", [source.series.name])
@@ -897,7 +908,7 @@ class GraphService:
 
         semantic_summary: dict[str, list[str]] = {
             "Author": [a.name for a in source.authors[:4]],
-            "Tag": [t.name for t in source.tags[:6]],
+            "Tag": book_tag_names(source)[:6],
         }
         if source.publisher:
             semantic_summary["Publisher"] = [source.publisher.name]
@@ -967,10 +978,9 @@ class GraphService:
         def book_text(book: Book) -> str:
             parts = [
                 book.title or "",
-                book.category or "",
                 book.description or "",
                 book.difficulty or "",
-                " ".join(t.name for t in book.tags),
+                " ".join(book_tag_names(book)),
                 " ".join(a.name for a in book.authors),
                 book.publisher.name if book.publisher else "",
                 book.series.name if book.series else "",
@@ -978,10 +988,10 @@ class GraphService:
             return " ".join(parts).lower()
 
         def book_category(book: Book) -> str:
-            return (book.category or "").strip()
+            return main_tag(book) or ""
 
         def book_tags(book: Book) -> set[str]:
-            return {str(t.name).strip() for t in book.tags if str(t.name).strip()}
+            return set(book_tag_names(book))
 
         def cluster_book_gate(cluster_key: str, book: Book) -> bool:
             """Decide whether a book is allowed to enter a user-facing interest cluster.

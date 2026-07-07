@@ -18,6 +18,7 @@ from app.schemas import BookCreate, BookUpdate
 from app.services.graph_service import GraphService
 from app.services.search_service import SearchService
 from app.services.serializers import book_card
+from app.utils.tagging import clean_public_tags, normalize_tags
 
 router = APIRouter(prefix="/books", tags=["公共 · 图书搜索与详情"])
 
@@ -126,10 +127,12 @@ def _commit_import_item(db: Session, item: BookImportItem) -> Book:
         shutil.copyfile(source, final_path)
     final_url = "/data/book_uploads/epubs/" + final_path.name
 
+    item_tags = normalize_tags(item.tags_text, item.category, item.title, item.description or "")
+
     book = Book(
         title=item.title.strip(),
         isbn=item.isbn or None,
-        category=item.category or None,
+        category=item_tags[0] if item_tags else None,
         publication_year=item.publication_year,
         page_count=item.page_count or 240,
         cover_url=item.cover_url or None,
@@ -141,7 +144,7 @@ def _commit_import_item(db: Session, item: BookImportItem) -> Book:
     if item.publisher:
         book.publisher = _get_or_create(db, Publisher, item.publisher.strip())
     book.authors = [_get_or_create(db, Author, name) for name in _split_names(item.authors_text)]
-    book.tags = [_get_or_create(db, Tag, name) for name in _split_names(item.tags_text)]
+    book.tags = [_get_or_create(db, Tag, name) for name in item_tags]
     db.add(book)
     db.flush()
 
@@ -181,7 +184,13 @@ def _apply_book_payload(db: Session, book: Book, payload: BookCreate | BookUpdat
     if authors is not None:
         book.authors = [_get_or_create(db, Author, name) for name in authors]
     if tags is not None:
-        book.tags = [_get_or_create(db, Tag, name) for name in tags]
+        clean_tags = clean_public_tags(tags)
+        book.tags = [_get_or_create(db, Tag, name) for name in clean_tags]
+        book.category = clean_tags[0] if clean_tags else None
+    elif "category" in data:
+        clean_tags = normalize_tags(None, book.category, book.title or "", book.description or "")
+        book.tags = [_get_or_create(db, Tag, name) for name in clean_tags]
+        book.category = clean_tags[0] if clean_tags else None
     db.add(book)
     db.commit()
     db.refresh(book)
@@ -197,11 +206,15 @@ def book_options(db: Session = Depends(get_db)):
         .filter(Book.is_deleted == False)
         .all()
     )  # noqa: E712
-    cats = sorted({b.category for b in books if b.category})
-    tags = sorted({t.name for b in books for t in b.tags})
+    tags = sorted({
+        tag
+        for b in books
+        for t in b.tags
+        for tag in clean_public_tags(t.name)
+    })
     authors = sorted({a.name for b in books for a in b.authors})
     publishers = sorted({b.publisher.name for b in books if b.publisher})
-    return {"categories": cats, "tags": tags, "authors": authors, "publishers": publishers}
+    return {"categories": [], "tags": tags, "authors": authors, "publishers": publishers}
 
 
 @router.get("")
@@ -217,7 +230,8 @@ def list_books(
     db: Session = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ):
-    return SearchService(db).search(q=q, category=category, tag=tag, author=author, sort=sort, page=page, limit=limit, user=user, mode=mode)
+    effective_tag = tag or category
+    return SearchService(db).search(q=q, category=None, tag=effective_tag, author=author, sort=sort, page=page, limit=limit, user=user, mode=mode)
 
 
 
