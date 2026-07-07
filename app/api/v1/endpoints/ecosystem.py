@@ -39,7 +39,7 @@ def _trial_payload(book: Book, user: User | None, *, record: bool = True) -> dic
         "book": book_card(book),
         "logged_in": bool(user),
         "allowed_pages": allowed_pages,
-        "content_type": "pdf" if book.ebook_pdf_url else ("epub" if book.ebook_epub_url else "text"),
+        "content_type": "epub" if book.ebook_epub_url else ("pdf" if book.ebook_pdf_url else "text"),
         "pdf_url": book.ebook_pdf_url,
         "epub_url": book.ebook_epub_url,
         "reader_url": f"/static/reader.html?book_id={book.id}&record=0&v=raf-2&t={book.id}",
