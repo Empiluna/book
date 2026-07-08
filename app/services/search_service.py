@@ -11,7 +11,7 @@ from app.models import Author, Book, Publisher, SearchLog, Tag, User
 from app.utils.search_terms import is_valid_search_keyword
 from app.services.embedding_service import EmbeddingService
 from app.services.serializers import book_card
-from app.utils.categories import category_matches, primary_category
+from app.utils.tagging import book_tag_names, main_tag
 
 settings = get_settings()
 
@@ -30,13 +30,13 @@ def _book_document(book: Book) -> dict[str, Any]:
         "title": book.title,
         "subtitle": book.subtitle,
         "isbn": book.isbn,
-        "category": primary_category(book.category),
+        "category": main_tag(book),
         "difficulty": book.difficulty,
         "description": book.description,
         "publisher": book.publisher.name if book.publisher else "",
         "series": book.series.name if book.series else "",
         "authors": [a.name for a in book.authors],
-        "tags": [t.name for t in book.tags],
+        "tags": book_tag_names(book),
         "avg_rating": book.avg_rating,
         "rating_count": book.rating_count,
         "hot_score": book.hot_score,
@@ -174,6 +174,9 @@ class SearchService:
         user: User | None = None,
         mode: str = "hybrid",
     ) -> dict:
+        if category and not tag:
+            tag = category
+        category = None
         mode = (mode or "hybrid").lower()
         if mode not in {"hybrid", "semantic", "keyword"}:
             raise HTTPException(400, "mode 只能为 hybrid / semantic / keyword")
@@ -213,7 +216,7 @@ class SearchService:
 
     def hybrid_search(self, q: str, category: str | None = None, tag: str | None = None, author: str | None = None, sort: str = "hot", page: int = 1, limit: int = 24, user: User | None = None) -> dict:
         natural_query = EmbeddingService.query_is_natural_language(q)
-        pool_size = max(120, limit * 6)
+        pool_size = max(180, limit * 8)
         keyword_payload = self._search_es(q, category, tag, author, sort="relevance", page=1, limit=pool_size, user=user, record=False) if self.client else self._search_sql(q, category, tag, author, sort="relevance", page=1, limit=pool_size, user=user, record=False)
         semantic_books = self._candidate_books(category, tag, author)
         semantic_ranked = EmbeddingService.rank_books(
@@ -251,7 +254,11 @@ class SearchService:
 
         # Natural-language queries should rely more on semantic intent; short exact queries should
         # preserve keyword precision. This keeps both “三体” and “适合大学生入门人工智能的书” usable.
-        weights = {"keyword_bm25": 0.45, "semantic_vector": 0.50, "quality": 0.05} if natural_query else {"keyword_bm25": 0.62, "semantic_vector": 0.33, "quality": 0.05}
+        weights = (
+            {"keyword_bm25": 0.18, "semantic_vector": 0.77, "quality": 0.05}
+            if natural_query
+            else {"keyword_bm25": 0.50, "semantic_vector": 0.45, "quality": 0.05}
+        )
 
         for card in keyword_payload.get("items", []):
             bid = int(card["id"])
@@ -322,8 +329,6 @@ class SearchService:
         self.ensure_index()
         filters = []
         filters.append({"bool": {"must_not": [{"term": {"category": ORIGINAL_CATEGORY}}]}})
-        if category:
-            filters.append({"term": {"category": primary_category(category)}})
         if tag:
             filters.append({"match": {"tags": tag}})
         if author:
@@ -334,7 +339,7 @@ class SearchService:
                     "must": [{
                         "multi_match": {
                             "query": q,
-                            "fields": ["title^4", "subtitle^2", "authors^3", "tags^3", "publisher^2", "series", "category^2", "description", "isbn^5"],
+                            "fields": ["title^4", "subtitle^2", "authors^3", "tags^4", "publisher^2", "series", "description", "isbn^5"],
                             "type": "best_fields",
                             "fuzziness": "AUTO",
                         }
@@ -401,7 +406,6 @@ class SearchService:
                     Book.title.like(like),
                     Book.subtitle.like(like),
                     Book.description.like(like),
-                    Book.category.like(like),
                     Book.isbn.like(like),
                     Book.difficulty.like(like),
                     Author.name.like(like),
@@ -416,13 +420,9 @@ class SearchService:
                 .filter(or_(*conditions))
                 .distinct()
             )
-        if category:
-            query = query.filter(Book.category.isnot(None))
         books = query.all()
-        if category:
-            books = [b for b in books if category_matches(b.category, category)]
         if tag:
-            books = [b for b in books if tag in [t.name for t in b.tags]]
+            books = [b for b in books if tag in book_tag_names(b)]
         if author:
             books = [b for b in books if author in [a.name for a in b.authors]]
         if q:
@@ -463,28 +463,53 @@ class SearchService:
             )
             .filter(Book.is_deleted == False, or_(Book.category.is_(None), Book.category != ORIGINAL_CATEGORY))
         )  # noqa: E712
-        if category:
-            query = query.filter(Book.category.isnot(None))
         books = query.all()
-        if category:
-            books = [b for b in books if category_matches(b.category, category)]
         if tag:
-            books = [b for b in books if tag in [t.name for t in b.tags]]
+            books = [b for b in books if tag in book_tag_names(b)]
         if author:
             books = [b for b in books if author in [a.name for a in b.authors]]
         return books
 
     @staticmethod
-    def _query_terms(q: str, max_terms: int = 16) -> list[str]:
+    def _query_terms(q: str, max_terms: int = 24) -> list[str]:
+        """Build SQL/ES fallback terms without letting noisy natural-language fragments dominate."""
         raw = (q or "").strip()
+        if not raw:
+            return [raw]
+
+        natural = EmbeddingService.query_is_natural_language(raw)
         terms: list[str] = []
 
-        if raw:
+        if not natural:
             terms.append(raw)
+
+        lowered = raw.lower()
+
+        for key, values in EmbeddingService.SYNONYMS.items():
+            if key.lower() in lowered:
+                for term in [key, *values[:8]]:
+                    if len(term) >= 2 and term not in terms:
+                        terms.append(term)
+                    if len(terms) >= max_terms:
+                        return terms
+
+        noisy_parts = [
+            "推荐", "适合", "有没有", "我想", "想看", "想读", "一本", "一部",
+            "书籍", "图书", "关于", "哪些", "什么",
+        ]
 
         for token in EmbeddingService.tokenize(raw):
             token = token.strip()
-            if len(token) >= 2 and token not in terms:
+            if len(token) < 2:
+                continue
+
+            if any(x in token for x in noisy_parts) and len(token) <= 5:
+                continue
+
+            if natural and len(token) == 2 and token not in EmbeddingService.SYNONYMS:
+                continue
+
+            if token not in terms:
                 terms.append(token)
 
             if len(terms) >= max_terms:
@@ -498,12 +523,11 @@ class SearchService:
             book.title or "",
             book.subtitle or "",
             book.description or "",
-            book.category or "",
             book.difficulty or "",
             book.publisher.name if book.publisher else "",
             book.series.name if book.series else "",
             " ".join(a.name for a in book.authors),
-            " ".join(t.name for t in book.tags),
+            " ".join(book_tag_names(book)),
         ]
         text = " ".join(text_parts).lower()
         tokens = EmbeddingService.tokenize(q)
@@ -517,7 +541,7 @@ class SearchService:
         # Title/tag/author exact-match boost.
         if q in (book.title or ""):
             score += 8.0
-        if any(q in t.name for t in book.tags):
+        if any(q in t for t in book_tag_names(book)):
             score += 5.0
         if any(q in a.name for a in book.authors):
             score += 5.0

@@ -91,24 +91,50 @@ async function loadShelfState(){
   return shelfState;
 }
 
-function bookCard(b, eager=false){
-  const id = b.id || b.book_id;
-  const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
-  const cover = b.cover_thumb_url || b.cover_url || '';
-  const loading = eager ? 'eager' : 'lazy';
-  const priority = eager ? ' fetchpriority="high"' : '';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${(b.authors||[]).join('、')||b.author||'未知作者'} · ${b.category||''} · ⭐${b.avg_rating||0}${b.rating_count ? ` (${b.rating_count}评)` : ''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}<div class="card-actions">${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></div></article>`;
+function uniqueTerms(items){
+  const seen = new Set();
+  const result = [];
+  for(const item of items || []){
+    const value = String(item || '').trim();
+    if(!value || seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
 }
-function bookCard(b, eager=false){
+function firstTagOf(b, fallback='图书'){
+  const tags = uniqueTerms(b?.tags || []);
+  return tags[0] || fallback;
+}
+function bookCard(b, eager=false, showReason=true){
   const id = b.id || b.book_id;
-  const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
+  const displayTags = uniqueTerms(b.tags || []).slice(0, 3);
+  const tags = displayTags.map(t=>`<span class="tag">${attr(t)}</span>`).join('');
   const cover = b.cover_thumb_url || b.cover_url || '';
   const loading = eager ? 'eager' : 'lazy';
   const priority = eager ? ' fetchpriority="high"' : '';
   const authors = (b.authors||[]).join('、') || b.author || '未知作者';
-  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})"><img class="cover" src="${cover}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'"><div class="book-info"><div class="book-card-header"><h4 class="book-card-title" title="${attr(b.title)}">${b.title}</h4></div><p class="meta">${authors} · ${b.category||''} · ⭐${b.avg_rating||0}${b.rating_count ? ` (${b.rating_count}评)` : ''}</p><div class="tags">${tags}</div>${b.reason?`<p class="reason">${b.reason}</p>`:''}</div><div class="card-actions"><button class="detail-action" onclick="event.stopPropagation(); openDetail(${id})">查看详情</button>${shelfButton(id,'想读')}<button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button></div></article>`;
-}
+  const rawTitle = b.title || '';
+  const displayTitle = rawTitle.length > 7 ? rawTitle.slice(0,7) + '...' : rawTitle;
+  const reasonHtml = showReason && b.reason ? `<p class="reason">${attr(b.reason)}</p>` : '';
 
+  return `<article class="book-card" data-book-card="${id}" onclick="openDetail(${id})">
+    <img class="cover" src="${attr(cover)}" loading="${loading}" decoding="async"${priority} width="96" height="140" onerror="this.src='' ; this.style.background='linear-gradient(135deg,#1e293b,#7c3aed)'">
+    <div class="book-info">
+      <div class="book-card-header">
+        <h4 class="book-card-title" title="${attr(rawTitle)}">${attr(displayTitle)}</h4>
+      </div>
+      <p class="meta">${attr(authors)} · ⭐${b.avg_rating||0}</p>
+      <div class="tags">${tags}</div>
+      ${reasonHtml}
+    </div>
+    <div class="card-actions">
+      <button class="detail-action" onclick="event.stopPropagation(); openDetail(${id})">查看详情</button>
+      ${shelfButton(id,'想读')}
+      <button class="feedback-action negative" onclick="markNotInterested(event, ${id})">不感兴趣</button>
+    </div>
+  </article>`;
+}
 async function recordFeedback(bookId, eventType, source='frontend'){
   if(!bookId) return;
   try{
@@ -139,18 +165,19 @@ function recordExposure(items, source='home'){
     ids.forEach(id => recordFeedback(id, 'exposure', source));
   }, 2000);
 }
-function miniItem(b){ return `<div class="mini-item" onclick="openDetail(${b.id || b.book_id})"><div><b>${b.title}</b><br><span>${(b.authors||[]).join('、')||b.author||''} · ⭐ ${b.avg_rating||0}</span></div><span>${b.category||''}</span></div>`; }
+function miniItem(b){ return `<div class="mini-item" onclick="openDetail(${b.id || b.book_id})"><div><b>${attr(b.title || '')}</b><br><span>${attr((b.authors||[]).join('、')||b.author||'')} · ⭐ ${b.avg_rating||0}</span></div><span>${attr(firstTagOf(b, ''))}</span></div>`; }
 function shelfMiniItem(item, shelfName){
   const b = item.book || item;
   const id = b.id || b.book_id;
   const cover = b.cover_thumb_url || b.cover_url || '';
   const authors = (b.authors||[]).join('、') || b.author || '';
+  const tag = firstTagOf(b, '图书');
   return `<div class="mini-item shelf-mini-item shelf-book-card" onclick="openDetail(${id})">
     <img class="shelf-book-cover" src="${attr(cover)}" loading="lazy" decoding="async" alt="${attr(b.title || '')}" onerror="this.src=''; this.classList.add('empty-cover')">
     <div class="shelf-book-info">
       <b title="${attr(b.title || '')}">${attr(b.title || '未命名图书')}</b>
       <span>${attr(authors)} · ⭐ ${b.avg_rating||0}</span>
-      <em>${attr(b.category||'图书')}</em>
+      <em>${attr(tag)}</em>
     </div>
     <div class="shelf-mini-actions">
       <button class="shelf-remove-btn" onclick="removeShelfBook(event, ${id}, '${jsString(shelfName)}')">删除</button>
@@ -229,14 +256,15 @@ async function loadBooks(q=''){
   const backendLabel = searchBackendLabel(data.search_backend);
   const semanticHint = q ? (data.query_understanding?.natural_language ? ' · 已理解自然语言意图' : ' · 已融合关键词与语义') : '';
   $('resultHint').textContent = `找到 ${data.total} 本相关图书 · ${backendLabel}${semanticHint}`;
-  $('bookGrid').innerHTML = data.items.map(bookCard).join('');
+  $('bookGrid').innerHTML = data.items.map(b => bookCard(b, false, false)).join('');
   refreshShelfButtons();
   recordExposure(data.items, q ? 'search' : 'discover');
   populateGraphBookSelect();
 }
 async function loadOptions(){
   const data = await api('/books/meta/options');
-  $('chips').innerHTML = [...new Set([...data.categories.slice(0,8), ...data.tags.slice(0,12)])].map(x=>`<button class="chip" onclick="searchByKeyword('${attr(x)}')">${x}</button>`).join('');
+  const chips = uniqueTerms(data.tags || []).slice(0, 24);
+  $('chips').innerHTML = chips.map(x=>`<button class="chip" onclick="searchByKeyword('${attr(x)}')">${attr(x)}</button>`).join('');
 }
 async function loadHotSearches(){
   const data = await api('/books/hot-searches?limit=10').catch(()=>({items:[]}));
@@ -315,7 +343,7 @@ async function openDetail(id){
   const sim = await api(`/recommend/similar/${id}?limit=6`).catch(()=>({items:[]}));
   const comments = await api(`/ecosystem/comments/${id}`).catch(()=>({items:[]}));
   const purchase = await api(`/ecosystem/purchase-links/${id}`).catch(()=>({links:[]}));
-  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${b.category||'图书'}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
+  $('detailContent').innerHTML = `<div class="detail-head"><img class="detail-cover" src="${b.cover_url}"><div><span class="pill">${attr(firstTagOf(b, '图书'))}</span><h2>${b.title}</h2><p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p><div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div><p>${b.description||''}</p><div class="actions"><button class="primary" onclick="openReader(${b.id})">在线试读</button>${shelfButton(b.id,'想读')}<button onclick="scrollToReviews()">评分</button><button class="feedback-action negative" onclick="markNotInterested(event, ${b.id})">不感兴趣</button></div>${purchaseChannelsHtml(b, purchase)}</div></div><div class="detail-recommend-section"><h3>你可能也喜欢</h3><div class="mini-list">${sim.items.map(miniItem).join('')||'暂无推荐'}</div></div>${reviewsHtml(b.id, comments)}`;
   $('detailModal').classList.remove('hidden');
 }
 async function openDetail(id){
@@ -335,7 +363,7 @@ async function openDetail(id){
         <div class="detail-head">
           <img class="detail-cover" src="${b.cover_url || b.cover_thumb_url || ''}">
           <div>
-            <span class="pill">${b.category||'图书'}</span>
+            <span class="pill">${attr(firstTagOf(b, '图书'))}</span>
             <h2>${b.title}</h2>
             <p class="meta">${(b.authors||[]).join('、')} · ${b.publisher||''} · ${b.publication_year||''} · <a href="javascript:void(0)" onclick="scrollToReviews()" class="rating-link">⭐ ${b.avg_rating} (${b.rating_count}人评分)</a></p>
             <div class="tags">${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
@@ -944,7 +972,7 @@ function uniquePreviewBooks(...groups){
 function guestShelfBookCard(book, badge='热门推荐'){
   const id = book.id || book.book_id;
   const authors = (book.authors || []).join('、') || book.author || '未知作者';
-  const tags = (book.tags || []).slice(0, 3).map(t => `<span class="tag">${attr(t)}</span>`).join('');
+  const tags = uniqueTerms(book.tags || []).slice(0, 3).map(t => `<span class="tag">${attr(t)}</span>`).join('');
   const rating = Number(book.avg_rating || 0).toFixed(1).replace('.0','');
   const cover = book.cover_thumb_url || book.cover_url || '';
   return `
@@ -955,7 +983,7 @@ function guestShelfBookCard(book, badge='热门推荐'){
       </div>
       <div class="guest-book-body">
         <h4 title="${attr(book.title || '')}">${book.title || '未命名图书'}</h4>
-        <p class="guest-meta">${authors} · ${book.category || '图书'} · ⭐ ${rating || 0}</p>
+        <p class="guest-meta">${attr(authors)} · ⭐ ${rating || 0}</p>
         <div class="tags">${tags}</div>
         <div class="guest-card-actions">
           <button onclick="event.stopPropagation(); window.location.href='/login?v=shelf'">登录后加入书架</button>
@@ -1589,7 +1617,7 @@ async function adminLoadBooks(){
   const q = $('adminBookSearch')?.value?.trim();
   const data = await api(q ? `/books?q=${encodeURIComponent(q)}&limit=80` : '/books/admin/export-json').catch(e=>({items:[], error:e.message}));
   if(data.error){ $('adminBookList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
-  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>`<tr><td>${b.id}</td><td><b>${b.title}</b><br><span>${b.publisher||''}</span></td><td>${(b.authors||[]).join('、')}</td><td>${b.category||''}</td><td>${b.avg_rating||0}</td><td><button onclick="adminEditBook(${b.id})">编辑</button><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无图书</td></tr>'}</tbody></table>`;
+  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>标签</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>`<tr><td>${b.id}</td><td><b>${b.title}</b><br><span>${b.publisher||''}</span></td><td>${(b.authors||[]).join('、')}</td><td>${uniqueTerms(b.tags || [b.category]).slice(0,3).join('、')}</td><td>${b.avg_rating||0}</td><td><button onclick="adminEditBook(${b.id})">编辑</button><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无图书</td></tr>'}</tbody></table>`;
 }
 async function adminEditBook(id){
   const b = await api(`/books/${id}`);

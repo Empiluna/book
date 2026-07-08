@@ -25,7 +25,7 @@ from app.models import (
 from app.services.graph_service import GraphService
 from app.services.serializers import book_card
 from app.services.user_service import build_user_profile
-from app.utils.categories import primary_category
+from app.utils.tagging import book_tag_names, main_tag
 
 settings = get_settings()
 ORIGINAL_CATEGORY = "用户原创"
@@ -229,7 +229,7 @@ class RecommendService:
         books = [b for b in self.db.query(Book).filter(Book.is_deleted == False).all() if self._is_public_book(b)]  # noqa: E712
         features: dict[int, set[str]] = {}
         for b in books:
-            f = {f"cat:{b.category}", f"pub:{b.publisher_id}", f"series:{b.series_id}"}
+            f = {f"pub:{b.publisher_id}", f"series:{b.series_id}"}
             f |= {f"tag:{t.id}" for t in b.tags}
             f |= {f"author:{a.id}" for a in b.authors}
             features[b.id] = {x for x in f if x and not x.endswith(':None')}
@@ -280,7 +280,6 @@ class RecommendService:
         exact: defaultdict[int, float] = defaultdict(float)
         tag_pref: defaultdict[str, float] = defaultdict(float)
         author_pref: defaultdict[str, float] = defaultdict(float)
-        category_pref: defaultdict[str, float] = defaultdict(float)
         for row in rows:
             weight = FEEDBACK_WEIGHTS.get(row.event_type, 0.0)
             exact[row.book_id] += weight
@@ -289,19 +288,16 @@ class RecommendService:
                 continue
             # Similar books only receive a softened signal. Negative feedback suppresses same-topic books.
             soft = weight * 0.25
-            category = primary_category(book.category)
-            if category:
-                category_pref[category] += soft
-            for tag in book.tags:
-                tag_pref[tag.name] += soft
+            for tag in book_tag_names(book):
+                tag_pref[tag] += soft
             for author in book.authors:
                 author_pref[author.name] += soft
-        return {"exact": exact, "tags": tag_pref, "authors": author_pref, "categories": category_pref}
+        return {"exact": exact, "tags": tag_pref, "authors": author_pref}
 
     def rerank_with_user_feedback(self, rows: list[dict], user: User | None) -> list[dict]:
         """Adjust candidate scores by explicit and implicit online feedback."""
         signal = self._feedback_signal(user)
-        if not signal["exact"] and not signal["tags"] and not signal["authors"] and not signal["categories"]:
+        if not signal["exact"] and not signal["tags"] and not signal["authors"]:
             for row in rows:
                 row.setdefault("rerank", {})["feedback_score"] = 0.0
                 row["base_score"] = row.get("score", 0.0)
@@ -311,10 +307,7 @@ class RecommendService:
             book: Book = row["book"]
             base = float(row.get("score") or 0.0)
             score = float(signal["exact"].get(book.id, 0.0))
-            category = primary_category(book.category)
-            if category:
-                score += float(signal["categories"].get(category, 0.0))
-            score += sum(float(signal["tags"].get(t.name, 0.0)) for t in book.tags)
+            score += sum(float(signal["tags"].get(t, 0.0)) for t in book_tag_names(book))
             score += sum(float(signal["authors"].get(a.name, 0.0)) for a in book.authors)
             # Keep feedback strong enough to be visible, but bounded to avoid one click dominating all ranking.
             bounded = max(min(score, 1.2), -1.2)
@@ -361,9 +354,9 @@ class RecommendService:
             for idx, row in enumerate(remaining):
                 book: Book = row["book"]
                 penalty = 0.0
-                category = primary_category(book.category)
-                if category and category_count[category] >= 3:
-                    penalty += 0.10 * (category_count[category] - 2)
+                tag = main_tag(book)
+                if tag and category_count[tag] >= 3:
+                    penalty += 0.10 * (category_count[tag] - 2)
                 for author in book.authors:
                     if author_count[author.name] >= 2:
                         penalty += 0.08 * (author_count[author.name] - 1)
@@ -377,9 +370,9 @@ class RecommendService:
             chosen["score"] = round(best_value, 4)
             chosen.setdefault("rerank", {})["diversity_penalty"] = diversity_penalty
             selected.append(chosen)
-            category = primary_category(book.category)
-            if category:
-                category_count[category] += 1
+            tag = main_tag(book)
+            if tag:
+                category_count[tag] += 1
             for author in book.authors:
                 author_count[author.name] += 1
         return selected
@@ -619,7 +612,8 @@ class RecommendService:
         for b in books:
             if not self._is_public_book(b):
                 continue
-            text = " ".join([b.title, b.description or "", b.category or "", b.difficulty or ""] + [a.name for a in b.authors] + [t.name for t in b.tags]).lower()
+            tag_names = book_tag_names(b)
+            text = " ".join([b.title, b.description or "", b.difficulty or ""] + [a.name for a in b.authors] + tag_names).lower()
             s = 0.0
             for term in terms:
                 if term.lower() in text:
@@ -627,15 +621,15 @@ class RecommendService:
             if user:
                 profile = build_user_profile(self.db, user)
                 for tag, w in profile.get("tag_weights", {}).items():
-                    if tag in [x.name for x in b.tags]:
+                    if tag in tag_names:
                         s += w * 0.8
             if "入门" in message and b.difficulty in {"入门", "大众"}:
                 s += 0.6
-            if "历史" in message and b.category == "历史":
+            if "历史" in message and "历史" in tag_names:
                 s += 1
-            if "科幻" in message and b.category == "科幻":
+            if "科幻" in message and "科幻" in tag_names:
                 s += 1
-            if "人工智能" in message and "人工智能" in [t.name for t in b.tags]:
+            if "人工智能" in message and "人工智能" in tag_names:
                 s += 1.3
             if s > 0:
                 scores.append((b, s))

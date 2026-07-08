@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.core.database import SessionLocal
 from app.models import Book, Author, Tag, Publisher, Series
+from app.utils.tagging import normalize_tags
 
 BOOK_READ_INFORM = ROOT / "book_read_inform"
 DATA_BOOK_READ = ROOT / "data" / "book_read"
@@ -197,6 +198,9 @@ def import_category(category_name: str, db) -> int:
                     shutil.copy2(str(img_file), str(dest_img))
                 cover_url = f"/data/book_read/{img_file.name}"
 
+        summary = book_entry.get("summary", "") or ""
+        clean_tags = normalize_tags(book_entry.get("tags", []), category_name, title, summary)
+
         # --- Create Book ---
         book = Book(
             title=title,
@@ -204,8 +208,8 @@ def import_category(category_name: str, db) -> int:
             publisher_id=publisher.id if publisher else None,
             series_id=series.id if series else None,
             publication_year=parse_year(book_entry.get("publish_year", "")),
-            category=category_name,
-            description=book_entry.get("summary", "") or None,
+            category=clean_tags[0] if clean_tags else None,
+            description=summary or None,
             page_count=parse_pages(book_entry.get("pages", "")),
             avg_rating=parse_score(book_entry.get("score", "")),
             rating_count=parse_votes(book_entry.get("votes", "")),
@@ -245,8 +249,7 @@ def import_category(category_name: str, db) -> int:
                 book.authors.append(author)
 
         # --- Tags ---
-        tag_names = book_entry.get("tags", [])
-        for tag_name in tag_names:
+        for tag_name in clean_tags:
             tag_name = tag_name.strip()
             if not tag_name:
                 continue

@@ -27,8 +27,8 @@ from app.models import (
     UserRating,
 )
 from app.services.serializers import book_card, user_card
-from app.utils.categories import primary_category
 from app.utils.search_terms import is_valid_search_keyword
+from app.utils.tagging import book_tag_names
 
 
 def _profile_cache_key(user_id: int) -> str:
@@ -325,21 +325,12 @@ def _apply_search_interest(
         mark,
         tag_counter: Counter[str],
         author_counter: Counter[str],
-        category_counter: Counter[str],
 ) -> None:
     if not searches:
         return
 
     tags = db.query(Tag).all()
     authors = db.query(Author).all()
-    categories = [
-        x[0]
-        for x in db.query(Book.category)
-        .filter(Book.category.isnot(None))
-        .distinct()
-        .all()
-        if x[0]
-    ]
     semantic_nodes = db.query(SemanticNode).all()
     for idx, s in enumerate(searches[:8]):
         keyword = (s.keyword or "").strip()
@@ -353,12 +344,6 @@ def _apply_search_interest(
             name = tag.name or ""
             if name and (name.lower() in q or q in name.lower()):
                 tag_counter[name] += 0.8 * decay
-                if tag.category:
-                    category_counter[tag.category] += 0.35 * decay
-
-        for category in categories:
-            if category and (category.lower() in q or q in category.lower()):
-                category_counter[category] += 0.6 * decay
 
         for author in authors:
             name = author.name or ""
@@ -370,9 +355,7 @@ def _apply_search_interest(
             if not name or not (name.lower() in q or q in name.lower()):
                 continue
 
-            if node.node_type == "Field":
-                category_counter[name] += 0.7 * decay
-            elif node.node_type in {"Keyword", "Topic"}:
+            if node.node_type in {"Field", "Keyword", "Topic"}:
                 tag_counter[name] += 0.5 * decay
 
         # Keep profile rebuilding cheap for homepage/profile graph rendering.
@@ -432,20 +415,16 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
 
     tag_counter: Counter[str] = Counter()
     author_counter: Counter[str] = Counter()
-    category_counter: Counter[str] = Counter()
     for book_id, weight in book_weights.items():
         book = book_objects.get(book_id)
         if not book:
             continue
-        for tag in book.tags:
-            tag_counter[tag.name] += weight
+        for tag in book_tag_names(book):
+            tag_counter[tag] += weight
         for author in book.authors:
             author_counter[author.name] += weight
-        category = primary_category(book.category)
-        if category:
-            category_counter[category] += weight
 
-    _apply_search_interest(db, searches, mark, tag_counter, author_counter, category_counter)
+    _apply_search_interest(db, searches, mark, tag_counter, author_counter)
 
     for book_id, weight in book_weights.items():
         book = book_objects.get(book_id)
@@ -453,18 +432,15 @@ def build_user_profile(db: Session, user: User) -> dict[str, Any]:
             continue
 
         if weight < 1.0:
-            for tag in book.tags:
-                tag_counter[tag.name] += weight
+            for tag in book_tag_names(book):
+                tag_counter[tag] += weight
             for author in book.authors:
                 author_counter[author.name] += weight
-            category = primary_category(book.category)
-            if category:
-                category_counter[category] += weight
 
     max_tag = max(tag_counter.values()) if tag_counter else 1
     tag_preferences = [{"name": k, "weight": round(v / max_tag, 3)} for k, v in tag_counter.most_common(12)]
     favorite_authors = [{"name": k, "weight": round(v, 2)} for k, v in author_counter.most_common(8)]
-    favorite_categories = [{"name": k, "weight": round(v, 2)} for k, v in category_counter.most_common(8)]
+    favorite_categories = [{"name": k, "weight": round(v, 2)} for k, v in tag_counter.most_common(8)]
     high_rated_book_ids = list(dict.fromkeys([r.book_id for r in ratings if r.rating >= 4.0]))
     if not high_rated_book_ids:
         high_rated_book_ids = [book_id for book_id, _ in
