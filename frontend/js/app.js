@@ -10,6 +10,7 @@ let graphBookOptions = [];
 let graphBookOptionsLoaded = false;
 let currentGraphData = null;
 let graphResponseCache = {};
+let graphOriginalSectionHtml = null;
 let originalAssistState = null;
 
 function syncAuthFromStorage(){
@@ -560,6 +561,14 @@ function getKnowledgeGraphAside(){
 
 function ensureGraphCanvas(){
   const graphRoot = getKnowledgeGraphRoot();
+
+  // If the user logs in after seeing the locked page, restore the original
+  // graph title, toolbar, layout and SVG container before drawing the real graph.
+  if(graphRoot && graphRoot.classList.contains('graph-section-locked') && graphOriginalSectionHtml){
+    graphRoot.innerHTML = graphOriginalSectionHtml;
+    graphRoot.classList.remove('graph-section-locked');
+  }
+
   const graphMain = getKnowledgeGraphMain();
 
   if(!graphMain) return;
@@ -571,7 +580,7 @@ function ensureGraphCanvas(){
   }
 
   if(graphRoot){
-    graphRoot.querySelectorAll('.graph-toolbar, .graph-filter, .graph-controls').forEach(el => {
+    graphRoot.querySelectorAll('.section-title, .graph-toolbar, .graph-filter, .graph-controls, .graph-layout').forEach(el => {
       el.style.display = '';
     });
   }
@@ -579,75 +588,82 @@ function ensureGraphCanvas(){
 
 function renderGraphLocked(){
   const graphRoot = getKnowledgeGraphRoot();
-  const graphMain = getKnowledgeGraphMain();
-  const graphAside = getKnowledgeGraphAside();
 
-  if(!graphMain){
-    console.warn('没有找到知识图谱主区域，未登录锁定页没有渲染');
+  if(!graphRoot){
+    console.warn('没有找到知识图谱区域，未登录锁定页没有渲染');
     return;
   }
 
-  graphMain.innerHTML = `
-    <div class="graph-locked-card">
-      <div class="graph-locked-visual">
-        <div class="locked-node center">我的<br>阅读画像</div>
-        <div class="locked-node n1">兴趣</div>
-        <div class="locked-node n2">图书</div>
-        <div class="locked-node n3">作者</div>
-        <div class="locked-node n4">标签</div>
+  if(!graphOriginalSectionHtml && !graphRoot.classList.contains('graph-section-locked')){
+    graphOriginalSectionHtml = graphRoot.innerHTML;
+  }
 
-        <span class="locked-line l1"></span>
-        <span class="locked-line l2"></span>
-        <span class="locked-line l3"></span>
-        <span class="locked-line l4"></span>
+  graphRoot.classList.add('graph-section-locked');
+  graphRoot.innerHTML = `
+    <div class="panel glass graph-locked-full">
+      <div class="graph-locked-full-head">
+        <span>Knowledge Graph Locked</span>
+        <h3>登录后查看完整画像图谱</h3>
+        <p>
+          当前未登录时，图谱模式、节点上限、应用和重绘图谱等控制项都会被锁定。
+          登录后系统会根据你的阅读、收藏、评分和兴趣标签生成个人画像图谱。
+        </p>
       </div>
 
-      <div class="graph-locked-content">
-        <div class="graph-locked-icon">知</div>
-        <h3>登录后查看你的画像图谱</h3>
-        <p>
-          知识图谱会根据你的阅读历史、收藏、评分、搜索关键词和兴趣标签，
-          生成属于你的个性化阅读关系图。
-        </p>
+      <div class="graph-locked-full-body">
+        <div class="graph-locked-card">
+          <div class="graph-locked-visual">
+            <div class="locked-node center">我的<br>阅读画像</div>
+            <div class="locked-node n1">兴趣</div>
+            <div class="locked-node n2">图书</div>
+            <div class="locked-node n3">作者</div>
+            <div class="locked-node n4">标签</div>
 
-        <div class="graph-locked-preview">
-          <span>阅读画像</span>
-          <i></i>
-          <span>兴趣簇</span>
-          <i></i>
-          <span>推荐图书</span>
+            <span class="locked-line l1"></span>
+            <span class="locked-line l2"></span>
+            <span class="locked-line l3"></span>
+            <span class="locked-line l4"></span>
+          </div>
+
+          <div class="graph-locked-content">
+            <div class="graph-locked-icon">知</div>
+            <h3>登录后查看你的画像图谱</h3>
+            <p>
+              知识图谱会根据你的阅读历史、收藏、评分、搜索关键词和兴趣标签，
+              生成属于你的个性化阅读关系图。
+            </p>
+
+            <div class="graph-locked-preview">
+              <span>阅读画像</span>
+              <i></i>
+              <span>兴趣簇</span>
+              <i></i>
+              <span>推荐图书</span>
+            </div>
+
+            <button onclick="window.location.href='/login?role=user'">
+              登录后查看图谱
+            </button>
+          </div>
         </div>
 
-        <button onclick="window.location.href='/login?role=user'">
-          登录后查看图谱
-        </button>
+        <aside class="graph-locked-side">
+          <h3>图谱功能已锁定</h3>
+          <p>登录后可以查看：</p>
+          <ul>
+            <li>个人兴趣簇</li>
+            <li>种子书关联</li>
+            <li>推荐路径解释</li>
+            <li>作者、标签、领域关系</li>
+          </ul>
+        </aside>
       </div>
     </div>
   `;
-
-  if(graphAside){
-    graphAside.innerHTML = `
-      <div class="graph-locked-side">
-        <h3>图谱功能已锁定</h3>
-        <p>登录后可以查看：</p>
-        <ul>
-          <li>个人兴趣簇</li>
-          <li>种子书关联</li>
-          <li>推荐路径解释</li>
-          <li>作者、标签、领域关系</li>
-        </ul>
-      </div>
-    `;
-  }
-
-  if(graphRoot){
-    graphRoot.querySelectorAll('.graph-toolbar, .graph-filter, .graph-controls').forEach(el => {
-      el.style.display = 'none';
-    });
-  }
 }
 async function loadGraph(){
-    if(!token){
+  syncAuthFromStorage();
+  if(!token){
     renderGraphLocked();
     return;
   }
