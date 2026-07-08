@@ -4,6 +4,35 @@ let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let currentBooks = [];
 let activeBook = null;
 let shelfState = {};
+const SHELF_DISPLAY_ORDER = ['在读', '想读', '已读'];
+function normalizeShelfName(name){
+  const raw = String(name ?? '').trim();
+  const map = {
+    reading: '在读',
+    read: '已读',
+    want: '想读',
+    want_to_read: '想读',
+    wantToRead: '想读'
+  };
+  return map[raw] || raw;
+}
+function orderedShelves(shelves = []){
+  const fixed = new Map(SHELF_DISPLAY_ORDER.map(name => [name, {name, count: 0, books: []}]));
+  const extras = [];
+  for(const rawShelf of shelves || []){
+    const displayName = normalizeShelfName(rawShelf?.name || rawShelf?.shelf_name || rawShelf?.status);
+    if(!displayName) continue;
+    const books = Array.isArray(rawShelf?.books) ? rawShelf.books : [];
+    const count = Number.isFinite(Number(rawShelf?.count)) ? Number(rawShelf.count) : books.length;
+    const shelf = {...rawShelf, name: displayName, count, books};
+    if(fixed.has(displayName)){
+      fixed.set(displayName, shelf);
+    }else{
+      extras.push(shelf);
+    }
+  }
+  return [...SHELF_DISPLAY_ORDER.map(name => fixed.get(name)), ...extras];
+}
 let readerStartAt = null;
 let readerBookId = null;
 let graphBookOptions = [];
@@ -68,9 +97,11 @@ function shelfButton(bookId, shelf){
   return `<button class="shelf-action ${active ? 'active' : ''}" data-book="${bookId}" data-shelf="${shelf}" onclick="toggleShelf(event, ${bookId}, '${shelf}')">${text}</button>`;
 }
 function refreshShelfButtons(bookId){
-  document.querySelectorAll(`[data-book="${bookId}"][data-shelf]`).forEach(btn=>{
+  const selector = bookId ? `[data-book="${bookId}"][data-shelf]` : '[data-book][data-shelf]';
+  document.querySelectorAll(selector).forEach(btn=>{
     const shelf = btn.dataset.shelf;
-    const active = isInShelf(bookId, shelf);
+    const id = btn.dataset.book;
+    const active = isInShelf(id, shelf);
     btn.classList.toggle('active', active);
     btn.textContent = active ? `取消${shelf}` : `加入${shelf}`;
   });
@@ -1095,8 +1126,16 @@ async function loadShelves(){
     return;
   }
   grid.classList.remove('guest-shelf-grid');
-  const data=await api('/ecosystem/shelves');
-  grid.innerHTML=data.shelves.map(s=>`<div class="shelf"><h4>${s.name} <span class="tag">${s.count}</span></h4><div class="mini-list">${s.books.slice(0,6).map(x=>miniItem(x.book)).join('')||'<span class="meta">暂无图书</span>'}</div></div>`).join('');
+  const data = await api('/ecosystem/shelves');
+  const shelves = orderedShelves(data.shelves || []);
+  grid.innerHTML = shelves.map(s => `
+    <div class="shelf">
+      <h4>${attr(s.name)} <span class="tag">${s.count}</span></h4>
+      <div class="mini-list shelf-book-list">
+        ${(s.books || []).map(x => shelfMiniItem(x, s.name)).join('') || '<span class="meta">暂无图书</span>'}
+      </div>
+    </div>
+  `).join('');
 }
 async function loadOriginalFile(event){
   const file = event.target.files && event.target.files[0];
@@ -1944,7 +1983,8 @@ async function loadShelves(){
   }
   grid.classList.remove('guest-shelf-grid');
   const data = await api('/ecosystem/shelves');
-  grid.innerHTML = (data.shelves || []).map(s => `
+  const shelves = orderedShelves(data.shelves || []);
+  grid.innerHTML = shelves.map(s => `
     <div class="shelf">
       <h4>${attr(s.name)} <span class="tag">${s.count}</span></h4>
       <div class="mini-list shelf-book-list">
