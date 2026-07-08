@@ -97,6 +97,7 @@ def book_card(
         "trial_count": book.trial_count,
         "hot_score": round(book.hot_score or 0, 3),
         "is_new": book.is_new,
+        "is_deleted": book.is_deleted,
         "score": round(score, 4) if score is not None else None,
         "source": source,
         "reason": reason,

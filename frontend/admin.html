@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>管理后台 · 知人知书</title>
-  <link rel="stylesheet" href="/static/css/app.css" />
+  <link rel="stylesheet" href="/static/css/app.css?v=admin-word-cloud-2" />
   <style>
     .admin-batchbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:rgba(248,250,252,.72)}
     .admin-batchbar button{padding:8px 12px;border-radius:999px;font-size:12px}
@@ -40,7 +40,30 @@
     .epub-editor-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
     .epub-editor-empty{color:#64748b;padding:28px;border:1px dashed rgba(148,163,184,.36);border-radius:14px;text-align:center;background:rgba(248,250,252,.72)}
     .epub-batch-summary{font-size:12px;color:#64748b;margin-top:8px;line-height:1.6}
+    .admin-login-shell{max-width:980px;margin:34px auto 0;display:grid;grid-template-columns:minmax(0,1.05fr) 380px;gap:22px;align-items:stretch;padding:0;background:transparent;border:0;box-shadow:none}
+    .admin-login-intro,.admin-login-card{border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border-radius:26px;box-shadow:0 22px 70px rgba(15,23,42,.12)}
+    .admin-login-intro{padding:30px;display:flex;flex-direction:column;justify-content:space-between;min-height:310px}
+    .admin-login-intro .pill{width:max-content;border-radius:9px}
+    .admin-login-intro h2{margin:16px 0 10px;font-size:34px;line-height:1.12;letter-spacing:0}
+    .admin-login-intro p{margin:0;color:#475569;line-height:1.75}
+    .admin-login-points{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:22px}
+    .admin-login-points span{padding:11px 12px;border-radius:14px;background:rgba(248,250,252,.82);border:1px solid rgba(148,163,184,.20);font-size:12px;font-weight:900;color:#334155}
+    .admin-login-card{padding:24px}
+    .admin-login-card h3{margin:0 0 6px;font-size:22px}
+    .admin-login-card p{margin:0 0 18px;color:#667085;font-size:13px;line-height:1.6}
+    .admin-login-form{display:grid;gap:12px}
+    .admin-login-form label{display:grid;gap:7px;color:#334155;font-size:13px;font-weight:900}
+    .admin-login-form input{width:100%;border:1px solid rgba(148,163,184,.32);border-radius:14px;background:rgba(255,255,255,.88);padding:12px 13px;outline:none}
+    .admin-login-form input:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+    .admin-login-form button{height:44px;border-radius:12px}
+    .admin-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+    .admin-header-actions .doclink,.admin-header-actions button{height:40px;display:inline-flex;align-items:center;justify-content:center;margin:0;padding:0 14px;border-radius:10px;white-space:nowrap}
+    .admin-word-cloud{min-height:172px;display:flex;align-content:center;align-items:center;justify-content:center;gap:12px 18px;flex-wrap:wrap;padding:10px 6px;overflow:hidden}
+    .admin-word-cloud .word{display:inline-flex;align-items:center;max-width:100%;padding:4px 3px;border:0;background:transparent;line-height:1.08;white-space:nowrap;text-shadow:0 8px 18px rgba(15,23,42,.09);transition:transform .16s ease,color .16s ease}
+    .admin-word-cloud .word:hover{color:#111827;transform:rotate(0deg) scale(1.06)!important}
+    .admin-word-cloud .word.tone-0{color:#6d28d9}.admin-word-cloud .word.tone-1{color:#0369a1}.admin-word-cloud .word.tone-2{color:#047857}.admin-word-cloud .word.tone-3{color:#b45309}.admin-word-cloud .word.tone-4{color:#be123c}
     @media(max-width:900px){.epub-workbench{grid-template-columns:1fr}.epub-editor-grid{grid-template-columns:1fr}}
+    @media(max-width:900px){.admin-login-shell{grid-template-columns:1fr}.admin-login-points{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -50,19 +73,39 @@
         <p class="eyebrow">Admin Console</p>
         <h1>管理后台</h1>
       </div>
-      <div class="actions">
+      <div class="actions admin-header-actions">
         <a class="doclink" href="/">返回用户端</a>
+        <button id="adminRefreshBtn" class="ghost hidden">刷新数据</button>
         <button id="adminAssistantBtn" class="ghost hidden">智能助手</button>
         <button id="logoutBtn" class="ghost hidden">退出登录</button>
       </div>
     </header>
 
-    <section id="adminLogin" class="panel glass">
-      <h3>管理员登录</h3>
-      <div class="admin-toolbar">
-        <input id="adminLoginUser" value="admin" placeholder="管理员账号" />
-        <input id="adminLoginPass" value="admin123" type="password" placeholder="密码" />
-        <button id="adminLoginBtn" class="primary">登录后台</button>
+    <section id="adminLogin" class="admin-login-shell">
+      <div class="admin-login-intro">
+        <div>
+          <span class="pill">Admin Console</span>
+          <h2>内容、用户与运营数据集中管理</h2>
+          <p>管理员端用于维护图书上下架、处理用户和评论数据，并查看平台运行概览。登录后可进入完整后台。</p>
+        </div>
+        <div class="admin-login-points">
+          <span>图书上下架</span>
+          <span>用户与评论管理</span>
+          <span>运营数据概览</span>
+        </div>
+      </div>
+      <div class="admin-login-card">
+        <h3>管理员登录</h3>
+        <p>请输入管理员账号和密码进入后台。</p>
+        <div class="admin-login-form">
+          <label>账号
+            <input id="adminLoginUser" placeholder="请输入管理员账号" autocomplete="username" />
+          </label>
+          <label>密码
+            <input id="adminLoginPass" type="password" placeholder="请输入密码" autocomplete="current-password" />
+          </label>
+          <button id="adminLoginBtn" class="primary">登录后台</button>
+        </div>
       </div>
     </section>
 
@@ -93,84 +136,86 @@
               <div id="adminUserChart" class="admin-donut-wrap"></div>
             </div>
             <div class="admin-chart-card">
-              <h4>热门图书 Top 5</h4>
-              <div id="adminHotBooks" class="admin-rank-list"></div>
+              <h4>热门图书词云</h4>
+              <div id="adminHotBooks" class="admin-word-cloud"></div>
             </div>
             <div class="admin-chart-card">
               <h4>热搜关键词</h4>
-              <div id="adminKeywordChart" class="admin-chip-list"></div>
+              <div id="adminKeywordChart" class="admin-word-cloud"></div>
             </div>
             <div class="admin-chart-card">
-              <h4>缓存状态</h4>
+              <h4>系统运行状态</h4>
               <div id="adminCacheStatus" class="admin-status-list"></div>
             </div>
           </div>
         </div>
+
+        <div class="panel glass wide admin-epub-control">
+          <div class="epub-import-panel">
+            <div class="epub-import-head">
+              <div>
+                <h3>批量上传 EPUB 待入库</h3>
+                <p>一次性选择多个 EPUB 文件，上传后所有文件会同时出现在左侧“待入库文件”列表；点击某本书后在右侧填写作者、分类、标签等信息，再确认入库。</p>
+              </div>
+            </div>
+            <div class="epub-import-actions">
+              <input id="adminBatchEpubFiles" name="files" type="file" accept=".epub,application/epub+zip" multiple onchange="adminPreviewSelectedEpubFiles()" />
+              <button id="adminStageEpubBtn" class="primary" onclick="adminStageEpubFiles()">批量上传到待入库</button>
+              <button onclick="adminCommitCurrentBatch()">批量确认全部入库</button>
+              <button onclick="adminLoadImportBatches()">刷新待入库</button>
+            </div>
+            <div id="adminSelectedEpubPreview" class="epub-selected-preview"></div>
+            <div id="adminImportSummary" class="epub-batch-summary">请选择多个 EPUB 文件上传。</div>
+            <div class="epub-workbench">
+              <div class="epub-file-list">
+                <h4>待入库文件</h4>
+                <div id="adminImportList" class="epub-import-list"><div class="epub-editor-empty">还没有待入库文件</div></div>
+              </div>
+              <div class="epub-editor">
+                <div id="adminImportEditorEmpty" class="epub-editor-empty">上传后，点击左侧任意 EPUB 文件，在这里编辑该书信息。</div>
+                <form id="adminImportEditor" class="hidden" onsubmit="adminSaveImportItem(event)">
+                  <h4 id="adminImportEditorTitle">编辑待入库图书</h4>
+                  <input type="hidden" id="adminImportItemId" />
+                  <div class="epub-editor-grid">
+                    <input id="adminImportTitle" placeholder="书名" required />
+                    <input id="adminImportAuthors" placeholder="作者，多个用逗号分隔" />
+                    <input id="adminImportCategory" placeholder="分类，例如 科幻 / 文学 / 技术" />
+                    <input id="adminImportTags" placeholder="标签，多个用逗号分隔" />
+                    <input id="adminImportPublisher" placeholder="出版社" />
+                    <input id="adminImportYear" type="number" placeholder="出版年份" />
+                    <input id="adminImportIsbn" placeholder="ISBN，可选" />
+                    <input id="adminImportPages" type="number" placeholder="页数" value="240" />
+                    <input id="adminImportCoverUrl" placeholder="封面 URL，可选" />
+                    <input id="adminImportCoverFile" type="file" accept="image/*" title="上传封面图，可选" />
+                    <textarea id="adminImportDescription" placeholder="简介：用于图书详情、搜索和推荐解释"></textarea>
+                  </div>
+                  <div class="epub-editor-actions">
+                    <button class="primary" type="submit">保存当前图书信息</button>
+                    <button type="button" onclick="adminCommitCurrentImportItem()">确认入库当前图书</button>
+                    <button type="button" class="danger-btn" onclick="adminDeleteCurrentImportItem()">移除待入库文件</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="panel glass wide">
           <div class="admin-tabs">
             <button class="admin-tab active" data-admin-tab="books">图书</button>
             <button class="admin-tab" data-admin-tab="users">用户</button>
             <button class="admin-tab" data-admin-tab="comments">评论</button>
-            <button class="admin-tab" data-admin-tab="settings">设置</button>
-            <button class="admin-tab" data-admin-tab="graphAdmin">图谱</button>
           </div>
 
           <div id="adminBooks" class="admin-pane active">
             <div class="admin-toolbar">
               <input id="adminBookSearch" placeholder="搜索图书" />
-              <button onclick="adminLoadBooks()">搜索</button>
+              <button onclick="adminLoadBooks(1)">搜索</button>
               <button onclick="adminReindex()">重建索引</button>
-              <button onclick="adminLoadImportBatches()">刷新待入库</button>
-            </div>
-
-            <div class="epub-import-panel">
-              <div class="epub-import-head">
-                <div>
-                  <h3>批量上传 EPUB 待入库</h3>
-                  <p>一次性选择多个 EPUB 文件，上传后所有文件会同时出现在左侧“待入库文件”列表；点击某本书后在右侧填写作者、分类、标签等信息，再确认入库。</p>
-                </div>
-              </div>
-              <div class="epub-import-actions">
-                <input id="adminBatchEpubFiles" name="files" type="file" accept=".epub,application/epub+zip" multiple onchange="adminPreviewSelectedEpubFiles()" />
-                <button id="adminStageEpubBtn" class="primary" onclick="adminStageEpubFiles()">批量上传到待入库</button>
-                <button onclick="adminCommitCurrentBatch()">批量确认全部入库</button>
-              </div>
-              <div id="adminSelectedEpubPreview" class="epub-selected-preview"></div>
-              <div id="adminImportSummary" class="epub-batch-summary">请选择多个 EPUB 文件上传。</div>
-              <div class="epub-workbench">
-                <div class="epub-file-list">
-                  <h4>待入库文件</h4>
-                  <div id="adminImportList" class="epub-import-list"><div class="epub-editor-empty">还没有待入库文件</div></div>
-                </div>
-                <div class="epub-editor">
-                  <div id="adminImportEditorEmpty" class="epub-editor-empty">上传后，点击左侧任意 EPUB 文件，在这里编辑该书信息。</div>
-                  <form id="adminImportEditor" class="hidden" onsubmit="adminSaveImportItem(event)">
-                    <h4 id="adminImportEditorTitle">编辑待入库图书</h4>
-                    <input type="hidden" id="adminImportItemId" />
-                    <div class="epub-editor-grid">
-                      <input id="adminImportTitle" placeholder="书名" required />
-                      <input id="adminImportAuthors" placeholder="作者，多个用逗号分隔" />
-                      <input id="adminImportCategory" placeholder="分类，例如 科幻 / 文学 / 技术" />
-                      <input id="adminImportTags" placeholder="标签，多个用逗号分隔" />
-                      <input id="adminImportPublisher" placeholder="出版社" />
-                      <input id="adminImportYear" type="number" placeholder="出版年份" />
-                      <input id="adminImportIsbn" placeholder="ISBN，可选" />
-                      <input id="adminImportPages" type="number" placeholder="页数" value="240" />
-                      <input id="adminImportCoverUrl" placeholder="封面 URL，可选" />
-                      <input id="adminImportCoverFile" type="file" accept="image/*" title="上传封面图，可选" />
-                      <textarea id="adminImportDescription" placeholder="简介：用于图书详情、搜索和推荐解释"></textarea>
-                    </div>
-                    <div class="epub-editor-actions">
-                      <button class="primary" type="submit">保存当前图书信息</button>
-                      <button type="button" onclick="adminCommitCurrentImportItem()">确认入库当前图书</button>
-                      <button type="button" class="danger-btn" onclick="adminDeleteCurrentImportItem()">移除待入库文件</button>
-                    </div>
-                  </form>
-                </div>
-              </div>
             </div>
 
             <div id="adminBookList" class="admin-table"></div>
+            <div id="adminBookPager" class="admin-pager"></div>
           </div>
 
           <div id="adminUsers" class="admin-pane">
@@ -206,48 +251,6 @@
             <div id="adminCommentBatchHint" class="admin-batch-hint">已选择 0 条帖子</div>
             <div id="adminCommentList" class="admin-table"></div>
           </div>
-
-          <div id="adminSettings" class="admin-pane">
-            <div class="admin-subpanel">
-              <h3>推荐权重</h3>
-              <div class="admin-form weights">
-                <input id="adminWeightKg" type="number" step="0.05" min="0" max="1" placeholder="知识图谱" />
-                <input id="adminWeightCf" type="number" step="0.05" min="0" max="1" placeholder="CF" />
-                <input id="adminWeightHot" type="number" step="0.05" min="0" max="1" placeholder="Hot" />
-                <input id="adminWeightNew" type="number" step="0.05" min="0" max="1" placeholder="New" />
-                <button class="primary" onclick="adminSaveWeights()">保存权重</button>
-                <button onclick="adminPrecomputeItemCf()">预计算 ItemCF</button>
-              </div>
-            </div>
-            <div class="admin-subpanel">
-              <h3>系统配置</h3>
-              <div class="admin-toolbar">
-                <input id="adminConfigKey" placeholder="配置键" />
-                <input id="adminConfigValue" placeholder="配置值" />
-                <input id="adminConfigDesc" placeholder="说明" />
-                <button onclick="adminSaveConfig()">保存配置</button>
-              </div>
-              <div id="adminConfigList" class="admin-table"></div>
-            </div>
-          </div>
-
-          <div id="adminGraphAdmin" class="admin-pane">
-            <div class="admin-toolbar">
-              <button onclick="adminGraphInit()">初始化约束</button>
-              <button onclick="adminGraphSync()">同步图谱</button>
-              <button onclick="adminGraphSemantic()">语义增强</button>
-            </div>
-            <div class="admin-toolbar">
-              <input id="adminRelSource" type="number" placeholder="源图书 ID" />
-              <input id="adminRelTarget" type="number" placeholder="目标图书 ID" />
-              <input id="adminRelType" placeholder="关系类型" value="SIMILAR_TO" />
-              <input id="adminRelWeight" type="number" step="0.1" value="1" />
-              <button onclick="adminCreateRelation()">创建关系</button>
-            </div>
-            <textarea id="adminCypher" class="admin-code" placeholder="MATCH (n) RETURN n LIMIT 10"></textarea>
-            <button onclick="adminRunCypher()">执行 Cypher</button>
-            <pre id="adminGraphResult" class="admin-result"></pre>
-          </div>
         </div>
       </div>
     </section>
@@ -259,7 +262,7 @@
       <button onclick="openAdminAssistant()">×</button>
     </div>
     <div id="adminChatBox" class="chat-box">
-      <div class="bubble">可以问我图书管理、用户运营、评论审核、推荐权重和知识图谱维护相关问题。</div>
+      <div class="bubble">可以问我图书管理、用户运营、评论审核和数据概览相关问题。</div>
     </div>
     <div class="chat-input">
       <input id="adminChatInput" placeholder="例如：帮我分析后台今天应该关注什么" />
@@ -267,6 +270,6 @@
     </div>
   </div>
 
-  <script src="/static/js/admin.js?v=admin-batch-management-1"></script>
+  <script src="/static/js/admin.js?v=admin-word-cloud-2"></script>
 </body>
 </html>

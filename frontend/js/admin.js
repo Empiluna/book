@@ -3,6 +3,8 @@ let token = localStorage.getItem('token') || '';
 let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let lastAdminDashboard = null;
 let lastAdminGraphStats = null;
+let adminBookPage = 1;
+const adminBookPageSize = 20;
 
 function $(id){ return document.getElementById(id); }
 function headers(){ return token ? {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'} : {'Content-Type':'application/json'}; }
@@ -13,7 +15,28 @@ function html(value){ return String(value ?? '').replace(/&/g,'&amp;').replace(/
 function stat(label, value){ return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
 function adminSplit(value){ return String(value||'').split(/[,，、]/).map(x=>x.trim()).filter(Boolean); }
 function adminJson(data){ return JSON.stringify(data, null, 2); }
-const adminMetricLabels = {books:'图书', users:'用户', comments:'评论', ratings:'评分', bookmarks:'收藏', searches:'搜索', chat_messages:'问答', purchase_clicks:'购书点击', nodes:'节点', relationships:'关系', semantic_nodes:'语义节点'};
+const adminMetricLabels = {
+  books:'图书',
+  users:'用户',
+  comments:'评论',
+  ratings:'评分',
+  bookmarks:'收藏',
+  searches:'搜索',
+  chat_messages:'问答',
+  purchase_clicks:'购书点击',
+  authors:'作者',
+  tags:'标签',
+  publishers:'出版社',
+  series:'系列',
+  semantic_nodes:'语义节点',
+  fields:'领域节点',
+  audiences:'读者群体节点',
+  difficulties:'难度节点',
+  keywords:'关键词节点',
+  topics:'主题节点',
+  relations:'关系',
+  advanced_relations:'高级语义关系',
+};
 
 function topObjectEntries(obj, limit=8){
   return Object.entries(obj || {}).sort((a,b)=>Number(b[1]||0)-Number(a[1]||0)).slice(0, limit).map(([name,count])=>({name, count}));
@@ -71,6 +94,7 @@ function setAdminVisible(visible){
   $('adminApp').classList.toggle('hidden', !visible);
   $('logoutBtn').classList.toggle('hidden', !visible);
   $('adminAssistantBtn')?.classList.toggle('hidden', !visible);
+  $('adminRefreshBtn')?.classList.toggle('hidden', !visible);
   if(!visible) $('adminAssistant')?.classList.add('hidden');
 }
 
@@ -147,7 +171,7 @@ async function sendAdminChat(){
     await ensureAdminAssistantContext();
     loadingMsg.textContent = '正在调用 AI 助手…';
     const context = JSON.stringify(buildAdminAssistantContext());
-    const prompt = `请以管理员助手身份回答。你可以使用以下后台实时数据作为分析依据，数据是JSON：${context}\n回答要求：优先基于数据给出结论、异常点和可执行建议；如果问题与数据无关，再按图书管理、用户运营、评论审核、推荐策略、知识图谱和系统配置经验回答。\n管理员问题：${message}`;
+    const prompt = `请以管理员助手身份回答。你可以使用以下后台实时数据作为分析依据，数据是JSON：${context}\n回答要求：优先基于数据给出结论、异常点和可执行建议；如果问题与数据无关，再按图书管理、用户运营、评论审核和数据分析经验回答。\n管理员问题：${message}`;
     const data = await api('/chat/send', {method:'POST', body:JSON.stringify({message:prompt})});
     loadingMsg.remove();
     const books = (data.books || []).slice(0, 3).map(b=>`<div class="mini-item"><b>${html(b.title)}</b><span>${html(b.reason || b.category || '')}</span></div>`).join('');
@@ -167,7 +191,7 @@ async function loadAdmin(){
   $('adminStats').innerHTML = Object.entries(dash.cards || {}).map(([k,v])=>stat(adminMetricLabels[k] || k, v)).join('');
   $('adminGraphStats').innerHTML = gs ? Object.entries(gs).filter(([,v])=>typeof v === 'number').map(([k,v])=>stat(adminMetricLabels[k] || k, v)).join('') : '';
   renderAdminInsights(dash);
-  await Promise.allSettled([adminLoadBooks(), adminLoadUsers(), adminLoadComments(), adminLoadSettings()]);
+  await Promise.allSettled([adminLoadBooks(), adminLoadImportBatches(), adminLoadUsers(), adminLoadComments()]);
 }
 
 function renderBars(id, entries, options={}){
@@ -234,25 +258,45 @@ function renderUserDonut(status){
 function renderHotBooks(items){
   const target = $('adminHotBooks');
   if(!target) return;
-  target.innerHTML = (items || []).slice(0, 5).map((b, index)=>`
-    <div class="admin-rank-row">
-      <em>${index + 1}</em>
-      <span><b>${html(b.title)}</b><small>${html((b.authors||[]).join('、') || b.category || '暂无作者')}</small></span>
-      <strong>${Number(b.hot_score || b.view_count || 0).toFixed(1)}</strong>
-    </div>
-  `).join('') || '<p class="meta">暂无数据</p>';
+  const rows = (items || []).slice(0, 10).map(b=>({
+    label: b.title,
+    value: Number(b.hot_score || b.view_count || 0),
+    meta: (b.authors || []).join('、') || b.category || '暂无作者',
+  })).filter(x=>x.label);
+  renderWordCloud(target, rows, '暂无热门图书');
+}
+
+function renderWordCloud(target, rows, emptyText='暂无数据'){
+  if(!target) return;
+  const clean = (rows || []).map(x=>({
+    label: x.label ?? x.keyword ?? x.name,
+    value: Number(x.value ?? x.count ?? 0),
+    meta: x.meta || '',
+  })).filter(x=>x.label);
+  const values = clean.map(x=>x.value);
+  const max = Math.max(1, ...values);
+  const min = Math.min(...values, max);
+  target.innerHTML = clean.map((x, index)=>{
+    const ratio = max === min ? .55 : (x.value - min) / (max - min);
+    const size = Math.round(14 + ratio * 22);
+    const weight = Math.round(650 + ratio * 250);
+    const tone = index % 5;
+    const rotations = [-7, 4, 0, -3, 7, 2, -5, 5];
+    const rotate = rotations[index % rotations.length];
+    const title = x.meta ? `${x.meta} · ${x.value}` : String(x.value);
+    return `<span class="word tone-${tone}" style="font-size:${size}px;font-weight:${weight};transform:rotate(${rotate}deg)" title="${attr(title)}">${html(x.label)}</span>`;
+  }).join('') || `<p class="meta">${html(emptyText)}</p>`;
 }
 
 function renderChips(id, rows){
   const target = $(id);
-  if(!target) return;
-  target.innerHTML = (rows || []).map(x=>`<span>${html(x.keyword)} <b>${x.count}</b></span>`).join('') || '<p class="meta">暂无热搜</p>';
+  renderWordCloud(target, rows, '暂无热搜');
 }
 
 function renderStatus(id, status){
   const target = $(id);
   if(!target) return;
-  target.innerHTML = Object.entries(status || {}).map(([k,v])=>`<div><span>${html(k)}</span><b>${html(typeof v === 'object' ? JSON.stringify(v) : v)}</b></div>`).join('') || '<p class="meta">暂无状态</p>';
+  target.innerHTML = (status || []).map(row=>`<div><span>${html(row.label)}</span><b>${html(row.value)}</b></div>`).join('') || '<p class="meta">暂无状态</p>';
 }
 
 function renderAdminInsights(dash){
@@ -262,40 +306,50 @@ function renderAdminInsights(dash){
   renderUserDonut(dash.user_status);
   renderHotBooks(dash.hot_books);
   renderChips('adminKeywordChart', dash.top_keywords);
-  renderStatus('adminCacheStatus', dash.cache);
+  renderStatus('adminCacheStatus', [
+    {label:'图书库状态', value:`${dash.cards?.books || 0} 本可展示`},
+    {label:'用户互动', value:`${dash.cards?.comments || 0} 条评论 / ${dash.cards?.ratings || 0} 条评分`},
+    {label:'推荐缓存', value:dash.cache?.backend ? '运行中' : '本地运行'},
+    {label:'搜索记录', value:`${dash.cards?.searches || 0} 次搜索`},
+  ]);
 }
 
 function adminSwitchTab(tab){
-  const panes = {books:'adminBooks', users:'adminUsers', comments:'adminComments', settings:'adminSettings', graphAdmin:'adminGraphAdmin'};
+  const panes = {books:'adminBooks', users:'adminUsers', comments:'adminComments'};
   document.querySelectorAll('.admin-tab').forEach(x=>x.classList.toggle('active', x.dataset.adminTab===tab));
   document.querySelectorAll('.admin-pane').forEach(x=>x.classList.remove('active'));
   $(panes[tab] || 'adminBooks')?.classList.add('active');
   if(tab === 'books') { adminLoadBooks(); adminLoadImportBatches(); }
   if(tab === 'users') adminLoadUsers();
   if(tab === 'comments') adminLoadComments();
-  if(tab === 'settings') adminLoadSettings();
 }
 
-async function adminLoadBooks(){
+async function adminLoadBooks(page=adminBookPage){
   if(!isAdmin()) return;
+  adminBookPage = Math.max(1, Number(page) || 1);
   const q = $('adminBookSearch')?.value?.trim();
-  const data = await api(q ? `/books?q=${encodeURIComponent(q)}&limit=80` : '/books/admin/export-json').catch(e=>({items:[], error:e.message}));
+  const params = new URLSearchParams({
+    page:String(adminBookPage),
+    limit:String(adminBookPageSize),
+    include_deleted:'true',
+  });
+  if(q) params.set('q', q);
+  const data = await api(`/books/admin/export-json?${params.toString()}`).catch(e=>({items:[], error:e.message}));
   if(data.error){ $('adminBookList').innerHTML = `<p class="meta">${data.error}</p>`; return; }
-  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>评分</th><th>操作</th></tr></thead><tbody>${(data.items||[]).map(b=>`<tr><td>${b.id}</td><td>${b.title}</td><td>${(b.authors||[]).join('、')}</td><td>${b.category||''}</td><td>${b.avg_rating||0}</td><td><button onclick="adminEditBook(${b.id})">编辑</button><button class="danger-btn" onclick="adminDeleteBook(${b.id}, '${attr(b.title)}')">删除</button></td></tr>`).join('') || '<tr><td colspan="6">暂无图书</td></tr>'}</tbody></table>`;
+  const rows = data.items || [];
+  $('adminBookList').innerHTML = `<table><thead><tr><th>ID</th><th>书名</th><th>作者</th><th>分类</th><th>评分</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows.map(b=>`<tr><td>${b.id}</td><td>${html(b.title)}<br><span>${html(b.publisher||'')}</span></td><td>${html((b.authors||[]).join('、'))}</td><td>${html(b.category||'')}</td><td>${Number(b.avg_rating||0).toFixed(1)} / 10</td><td><span class="${b.is_deleted?'status-bad':'status-ok'}">${b.is_deleted?'已下架':'已上架'}</span></td><td><button class="${b.is_deleted?'':'danger-btn'}" onclick="adminToggleBookStatus(${b.id}, ${!!b.is_deleted}, '${attr(b.title)}')">${b.is_deleted?'上架':'下架'}</button></td></tr>`).join('') || '<tr><td colspan="7">暂无图书</td></tr>'}</tbody></table>`;
+  renderAdminBookPager(data.total || 0, data.page || adminBookPage, data.limit || adminBookPageSize);
 }
 
-async function adminEditBook(id){
-  const b = await api(`/books/${id}`);
-  $('adminBookId').value = b.id;
-  $('adminBookTitle').value = b.title || '';
-  $('adminBookAuthors').value = (b.authors||[]).join('，');
-  $('adminBookCategory').value = b.category || '';
-  $('adminBookTags').value = (b.tags||[]).join('，');
-  $('adminBookPublisher').value = b.publisher || '';
-  $('adminBookYear').value = b.publication_year || '';
-  $('adminBookCover').value = b.cover_url && !String(b.cover_url).startsWith('data:') ? b.cover_url : '';
-  $('adminBookDescription').value = b.description || '';
-  adminSwitchTab('books');
+function renderAdminBookPager(total, page, limit){
+  const target = $('adminBookPager');
+  if(!target) return;
+  const pages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
+  target.innerHTML = `
+    <button ${page <= 1 ? 'disabled' : ''} onclick="adminLoadBooks(${page - 1})">上一页</button>
+    <span>第 ${page} / ${pages} 页，共 ${total} 本</span>
+    <button ${page >= pages ? 'disabled' : ''} onclick="adminLoadBooks(${page + 1})">下一页</button>
+  `;
 }
 
 function adminResetBookForm(){ $('adminBookForm')?.reset(); if($('adminBookId')) $('adminBookId').value=''; }
@@ -324,10 +378,11 @@ async function adminSaveBook(event){
   await adminLoadBooks();
 }
 
-async function adminDeleteBook(id, title){
-  if(!confirm(`确认删除《${title}》？`)) return;
-  await api(`/books/admin/${id}`, {method:'DELETE'});
-  toast('图书已删除');
+async function adminToggleBookStatus(id, isDeleted, title){
+  const nextDeleted = !isDeleted;
+  if(!confirm(`确认${nextDeleted ? '下架' : '上架'}《${title}》？`)) return;
+  await api(`/books/admin/${id}/status`, {method:'PUT', body:JSON.stringify({is_deleted:nextDeleted})});
+  toast(nextDeleted ? '图书已下架' : '图书已上架');
   await Promise.allSettled([adminLoadBooks(), loadAdmin()]);
 }
 
@@ -658,6 +713,7 @@ $('adminBookForm')?.addEventListener('submit', adminSaveBook);
 $('adminLoginBtn').onclick = adminLogin;
 $('logoutBtn').onclick = logout;
 $('adminAssistantBtn').onclick = openAdminAssistant;
+$('adminRefreshBtn').onclick = async () => { await loadAdmin(); toast('后台数据已刷新'); };
 $('adminLoginPass').addEventListener('keydown', e=>{ if(e.key === 'Enter') adminLogin(); });
 $('adminChatInput')?.addEventListener('keydown', e=>{ if(e.key === 'Enter') sendAdminChat(); });
 loadAdmin();

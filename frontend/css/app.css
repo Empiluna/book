@@ -2186,6 +2186,28 @@
   display:none !important;
 }
 
+.admin-pager{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  margin-top:12px;
+  color:#475569;
+  font-size:13px;
+  font-weight:800;
+}
+
+.admin-pager button{
+  border-radius:8px;
+  padding:7px 12px;
+}
+
+.admin-pager button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+  transform:none;
+}
+
 /* Bookshelf cover cards */
 .shelf-panel{
   max-height:calc(100vh - 150px);
@@ -2288,4 +2310,46 @@
     width:52px;
     height:72px;
   }
+}
+
+/* Admin word clouds and standalone EPUB import control */
+.admin-word-cloud{
+  min-height:172px;
+  display:flex;
+  align-content:center;
+  align-items:center;
+  justify-content:center;
+  gap:12px 18px;
+  flex-wrap:wrap;
+  padding:10px 6px;
+  overflow:hidden;
+}
+
+.admin-word-cloud .word{
+  display:inline-flex;
+  align-items:center;
+  max-width:100%;
+  padding:4px 3px;
+  border:0;
+  background:transparent;
+  color:#1f2937;
+  line-height:1.08;
+  white-space:nowrap;
+  text-shadow:0 8px 18px rgba(15,23,42,.09);
+  transition:transform .16s ease,color .16s ease;
+}
+
+.admin-word-cloud .word:hover{
+  color:#111827;
+  transform:rotate(0deg) scale(1.06) !important;
+}
+
+.admin-word-cloud .word.tone-0{color:#6d28d9}
+.admin-word-cloud .word.tone-1{color:#0369a1}
+.admin-word-cloud .word.tone-2{color:#047857}
+.admin-word-cloud .word.tone-3{color:#b45309}
+.admin-word-cloud .word.tone-4{color:#be123c}
+
+.admin-epub-control .epub-import-panel{
+  margin:0;
 }

@@ -27,21 +27,25 @@ def dashboard(admin: User = Depends(require_admin), db: Session = Depends(get_db
     chats = db.query(ChatHistory).count()
     hot = db.query(Book).filter(Book.is_deleted == False).order_by((Book.hot_score + Book.view_count * 0.1).desc()).limit(10).all()  # noqa: E712
     categories = {}
-    rating_distribution = {"0-2": 0, "2-3": 0, "3-4": 0, "4-5": 0}
+    rating_distribution = {"0-2分": 0, "2-4分": 0, "4-6分": 0, "6-8分": 0, "8-10分": 0}
     difficulty_distribution = {}
     books_rows = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
     for b in books_rows:
+        if b.category == "用户原创":
+            continue
         categories[b.category or "未分类"] = categories.get(b.category or "未分类", 0) + 1
         difficulty_distribution[b.difficulty or "未设置"] = difficulty_distribution.get(b.difficulty or "未设置", 0) + 1
         score = b.avg_rating or 0
         if score < 2:
-            rating_distribution["0-2"] += 1
-        elif score < 3:
-            rating_distribution["2-3"] += 1
+            rating_distribution["0-2分"] += 1
         elif score < 4:
-            rating_distribution["3-4"] += 1
+            rating_distribution["2-4分"] += 1
+        elif score < 6:
+            rating_distribution["4-6分"] += 1
+        elif score < 8:
+            rating_distribution["6-8分"] += 1
         else:
-            rating_distribution["4-5"] += 1
+            rating_distribution["8-10分"] += 1
 
     today = datetime.utcnow().date()
     activity = []

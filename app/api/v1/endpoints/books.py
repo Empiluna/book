@@ -7,7 +7,7 @@ import shutil
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -287,6 +287,17 @@ def delete_book(book_id: int, admin: User = Depends(require_admin), db: Session 
     return {"message": "图书已软删除并刷新索引"}
 
 
+@router.put("/admin/{book_id}/status")
+def update_book_status(book_id: int, payload: dict, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    book = db.get(Book, book_id)
+    if not book:
+        raise HTTPException(404, "图书不存在")
+    is_deleted = bool(payload.get("is_deleted", False))
+    book.is_deleted = is_deleted
+    db.commit()
+    return {"message": "图书已下架" if is_deleted else "图书已上架", "book": book_card(book)}
+
+
 @router.post("/admin/import-json")
 async def import_json(file: UploadFile = File(...), admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     import json
@@ -505,9 +516,26 @@ def admin_delete_import_item(item_id: int, admin: User = Depends(require_admin),
 
 
 @router.get("/admin/export-json")
-def export_json(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    books = db.query(Book).filter(Book.is_deleted == False).all()  # noqa: E712
-    return {"items": [book_card(b) for b in books], "total": len(books)}
+def export_json(
+    q: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    include_deleted: bool = Query(True),
+    include_original: bool = Query(False),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Book)
+    if not include_original:
+        query = query.filter(or_(Book.category.is_(None), Book.category != "用户原创"))
+    if not include_deleted:
+        query = query.filter(Book.is_deleted == False)  # noqa: E712
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter(Book.title.like(like))
+    total = query.count()
+    books = query.order_by(Book.id.desc()).offset((page - 1) * limit).limit(limit).all()
+    return {"items": [book_card(b) for b in books], "total": total, "page": page, "limit": limit}
 
 
 @router.post("/admin/reindex-search")
