@@ -245,6 +245,8 @@ class RecommendService:
         return sim
 
     def cf_scores(self, user: User | None, book_id: int | None = None, limit: int = 50) -> list[dict]:
+        if not user and not book_id:
+            return []
         sim = self._rating_matrix_similarity()
         candidate: defaultdict[int, float] = defaultdict(float)
         seed_scores: dict[int, float] = {}
@@ -432,7 +434,7 @@ class RecommendService:
                 tag_pref[tag.name] += weight
             for author in book.authors:
                 author_pref[author.name] += weight
-            category = primary_category(book.category)
+            category = main_tag(book)
             if category:
                 category_pref[category] += weight
 
@@ -456,7 +458,7 @@ class RecommendService:
                 continue
             book: Book = row["book"]
             affinity = 0.0
-            category = primary_category(book.category)
+            category = main_tag(book)
             if category:
                 affinity += min(float(category_pref.get(category, 0.0)), 3.0) * 0.045
             affinity += min(sum(float(tag_pref.get(t.name, 0.0)) for t in book.tags), 3.0) * 0.04
