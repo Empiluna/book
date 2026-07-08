@@ -1,7 +1,12 @@
 <script>
+import { getPlatformLabel, ORIGIN } from './api/request.js'
+
 export default {
   onLaunch: function () {
-    console.log('[frontend-uni] full feature app launch')
+    console.log('[frontend-uni] app launch:', getPlatformLabel(), ORIGIN)
+  },
+  onShow: function () {
+    console.log('[frontend-uni] app show')
   }
 }
 </script>
@@ -13,13 +18,14 @@ page {
   color: #17202a;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
-view, text, button, input, textarea, image, scroll-view {
+view, text, button, input, textarea, image, scroll-view, web-view {
   box-sizing: border-box;
 }
 button::after { border: none; }
 .container {
   min-height: 100vh;
   padding: 24rpx;
+  padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
   background:
     radial-gradient(circle at 12% 0%, #dbeafe 0, transparent 34%),
     radial-gradient(circle at 86% 12%, #ede9fe 0, transparent 32%),
@@ -31,6 +37,7 @@ button::after { border: none; }
   padding: 26rpx;
   margin-bottom: 22rpx;
   box-shadow: 0 14rpx 36rpx rgba(15, 23, 42, .08);
+  border: 1rpx solid rgba(226,232,240,.72);
 }
 .row { display:flex; align-items:center; }
 .between { display:flex; align-items:center; justify-content:space-between; }
@@ -91,7 +98,8 @@ button::after { border: none; }
 }
 .chip.active { background:#ede9fe; color:#5b21b6; }
 .stat-grid { display:flex; gap:16rpx; flex-wrap:wrap; }
-.stat-item { flex:1; min-width:145rpx; text-align:center; background:#fff; border-radius:22rpx; padding:20rpx 10rpx; }
+.stat-item { flex:1; min-width:145rpx; text-align:center; background:#fff; border-radius:22rpx; padding:20rpx 10rpx; border:1rpx solid #eef2f7; }
 .stat-num { display:block; color:#7c3aed; font-size:38rpx; font-weight:900; }
 .empty { text-align:center; color:#667085; padding:36rpx 20rpx; }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 </style>

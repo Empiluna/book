@@ -1,12 +1,32 @@
 <template>
-  <view class="container">
-    <view class="card">
+  <view class="container shelf-page">
+    <view class="card hero">
       <view class="between"><text class="title">我的书架</text><button v-if="!logged" class="btn small" @click="goLogin">登录</button></view>
-      <text class="muted">按想读、在读、已读管理图书，并继续上次阅读。</text>
+      <text class="muted">管理想读、在读、已读图书，继续上次阅读。</text>
     </view>
+
     <view v-if="error" class="card"><text class="muted">{{ error }}</text></view>
-    <view v-if="!logged" class="card empty"><text class="muted">请先登录后查看书架。</text></view>
-    <view v-if="logged" class="tabs"><text v-for="s in shelves" :key="s.name" :class="active===s.name?'chip active':'chip'" @click="active=s.name">{{ s.name }} {{ s.count }}</text></view>
+
+    <view v-if="!logged" class="card guest">
+      <text class="title">登录后解锁完整书架</text>
+      <text class="muted">登录后可以同步阅读进度、收藏图书、继续阅读和生成兴趣画像。</text>
+      <view class="guest-stats">
+        <view><text class="stat-num">想读</text><text class="muted">收藏计划</text></view>
+        <view><text class="stat-num">在读</text><text class="muted">续读进度</text></view>
+        <view><text class="stat-num">已读</text><text class="muted">沉淀画像</text></view>
+      </view>
+      <button class="btn" @click="goLogin">登录后查看书架</button>
+    </view>
+
+    <view v-if="logged" class="tabs">
+      <text v-for="s in shelves" :key="s.name" :class="active===s.name?'chip active':'chip'" @click="active=s.name">{{ s.name }} {{ s.count }}</text>
+    </view>
+
+    <view v-if="logged && !activeBooks.length" class="card empty">
+      <text class="muted">当前书架暂无图书，可以去发现页添加。</text>
+      <button class="btn small" @click="goSearch">去发现</button>
+    </view>
+
     <view v-for="item in activeBooks" :key="item.book.id" class="shelf-book card">
       <BookCard :book="item.book" @click="goDetail"></BookCard>
       <view class="book-actions">
@@ -38,6 +58,7 @@ export default {
       }).catch(function (e) { that.error = e.message || '书架加载失败' }).then(function () { if (done) done() })
     },
     goLogin: function () { uni.navigateTo({ url: '/pages/login/login' }) },
+    goSearch: function () { uni.switchTab({ url: '/pages/search/search' }) },
     goDetail: function (book) { uni.navigateTo({ url: '/pages/detail/detail?id=' + (book.id || book.book_id) }) },
     continueRead: function (item) { const b = item.book || {}; uni.navigateTo({ url: '/pages/reader/reader?id=' + (b.id || b.book_id) }) },
     move: function (item, target) {
@@ -52,5 +73,5 @@ export default {
 }
 </script>
 <style scoped>
-.tabs{display:flex;gap:10rpx;flex-wrap:wrap;margin-bottom:20rpx}.shelf-book{padding:10rpx 0 22rpx}.book-actions{display:flex;gap:10rpx;padding:0 20rpx}.book-actions .btn{flex:1;padding:0 8rpx;font-size:22rpx}
+.hero{background:linear-gradient(135deg,#fff,#eff6ff)}.tabs{display:flex;gap:12rpx;flex-wrap:wrap;margin-bottom:20rpx}.shelf-book{padding:10rpx 0 22rpx}.book-actions{display:flex;gap:10rpx;padding:0 20rpx;flex-wrap:wrap}.book-actions .btn{flex:1;padding:0 8rpx;font-size:22rpx}.guest-stats{display:flex;gap:12rpx;margin:22rpx 0}.guest-stats view{flex:1;background:#fff;border-radius:20rpx;padding:18rpx 8rpx;text-align:center;border:1rpx solid #eef2f7}.guest .btn{margin-top:8rpx}
 </style>

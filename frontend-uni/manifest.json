@@ -1,33 +1,65 @@
 {
   "name": "知人知书",
   "appid": "__UNI__KGBOOK",
-  "description": "基于知识图谱的个性化荐书系统移动端",
-  "versionName": "1.0.0",
-  "versionCode": "100",
+  "description": "基于知识图谱的个性化荐书系统 Android / iOS / 微信小程序端",
+  "versionName": "1.0.1",
+  "versionCode": "101",
   "transformPx": false,
   "app-plus": {
     "usingComponents": true,
+    "renderer": "auto",
     "nvueStyleCompiler": "uni-app",
     "compilerVersion": 3,
-    "splashscreen": { "alwaysShowBeforeRender": true, "waiting": true, "autoclose": true, "delay": 0 },
+    "splashscreen": {
+      "alwaysShowBeforeRender": true,
+      "waiting": true,
+      "autoclose": true,
+      "delay": 0
+    },
     "modules": {},
     "distribute": {
       "android": {
         "permissions": [
           "android.permission.INTERNET",
           "android.permission.ACCESS_NETWORK_STATE",
-          "android.permission.ACCESS_WIFI_STATE"
+          "android.permission.ACCESS_WIFI_STATE",
+          "android.permission.READ_EXTERNAL_STORAGE",
+          "android.permission.WRITE_EXTERNAL_STORAGE"
         ]
       },
-      "ios": {}
+      "ios": {
+        "idfa": false,
+        "dSYMs": false,
+        "privacyDescription": {
+          "NSPhotoLibraryUsageDescription": "用于选择上传的参考文档或封面图片。",
+          "NSPhotoLibraryAddUsageDescription": "用于保存阅读或生成内容相关图片。",
+          "NSCameraUsageDescription": "如后续启用拍照上传封面，将用于拍摄图片。"
+        },
+        "plistcmds": [
+          "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true"
+        ]
+      }
     }
   },
   "mp-weixin": {
     "appid": "",
-    "setting": { "urlCheck": false, "es6": true, "postcss": true, "minified": false }
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "postcss": true,
+      "minified": false,
+      "enhance": true
+    },
+    "usingComponents": true,
+    "optimization": {
+      "subPackages": true
+    }
   },
   "h5": {
     "title": "知人知书",
-    "devServer": { "port": 8080 }
+    "devServer": {
+      "port": 8080,
+      "host": "0.0.0.0"
+    }
   }
 }

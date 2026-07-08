@@ -1,20 +1,49 @@
 const LOCAL_ORIGIN = 'http://127.0.0.1:8000'
-// 安卓真机、微信小程序开发工具连接电脑后端时，用电脑 ipconfig 里的 IPv4。
-// 你当前电脑可先用这个：10.244.4.250
-const LAN_ORIGIN = 'http://10.244.4.250:8000'
+
+// Android 真机、iPhone 真机、微信开发者工具连接电脑后端时，用电脑 ipconfig 里“有默认网关”的 IPv4。
+// 你之前可用的 WLAN 地址是 10.242.11.113；如果换了网络，只改这里即可。
+const LAN_ORIGIN = 'http://192.168.139.11:8000'
+
+// 后续部署到服务器后，把 USE_PROD 改为 true，并把 PROD_ORIGIN 改成 HTTPS 域名。
+// 微信小程序正式预览/发布、iOS 正式打包都建议使用 HTTPS。
 const PROD_ORIGIN = 'https://你的线上域名'
+const USE_PROD = false
 
-let ORIGIN = LOCAL_ORIGIN
-// #ifdef APP-PLUS
-ORIGIN = LAN_ORIGIN
-// #endif
-// #ifdef MP-WEIXIN
-ORIGIN = LAN_ORIGIN
-// #endif
-// #ifdef H5
-ORIGIN = LOCAL_ORIGIN
-// #endif
+function systemInfo() {
+  try { return uni.getSystemInfoSync() || {} } catch (e) { return {} }
+}
 
+function getPlatformName() {
+  let name = 'h5'
+  // #ifdef APP-PLUS
+  const sys = systemInfo()
+  name = (sys.platform === 'ios') ? 'ios' : 'android'
+  // #endif
+  // #ifdef MP-WEIXIN
+  name = 'mp-weixin'
+  // #endif
+  // #ifdef H5
+  name = 'h5'
+  // #endif
+  return name
+}
+
+function getPlatformLabel() {
+  const map = {
+    h5: '浏览器 H5',
+    android: 'Android App',
+    ios: 'iOS App',
+    'mp-weixin': '微信小程序'
+  }
+  return map[getPlatformName()] || getPlatformName()
+}
+
+function resolveOrigin() {
+  if (USE_PROD) return PROD_ORIGIN.replace(/\/$/, '')
+  return getPlatformName() === 'h5' ? LOCAL_ORIGIN : LAN_ORIGIN
+}
+
+const ORIGIN = resolveOrigin()
 const SERVER_ORIGIN = ORIGIN
 const API_BASE = ORIGIN + '/api/v1'
 
@@ -54,7 +83,7 @@ function normalizeBook(book) {
     id: book.id || book.book_id,
     book_id: book.book_id || book.id,
     author: book.author || authors.join('、') || '未知作者',
-    cover_url: toAbsoluteUrl(book.cover_url || book.cover || book.image_url || ''),
+    cover_url: toAbsoluteUrl(book.cover_thumb_url || book.cover_url || book.cover || book.image_url || ''),
     tags: Array.isArray(book.tags) ? book.tags : [],
     avg_rating: book.avg_rating || 0,
     category: book.category || '图书'
@@ -66,21 +95,31 @@ function normalizeBooks(list) {
   return list.map(function (x) { return normalizeBook(x.book || x) })
 }
 
+function makeRequestUrl(path) {
+  if (!path) return API_BASE
+  if (path.indexOf('http://') === 0 || path.indexOf('https://') === 0) return path
+  if (path.indexOf('/api/v1') === 0) return ORIGIN + path
+  if (path.charAt(0) !== '/') path = '/' + path
+  return API_BASE + path
+}
+
 function request(path, options) {
   options = options || {}
   const method = options.method || 'GET'
   const data = options.data || options.body || undefined
   const token = getToken()
-  const header = options.header || {}
-  header['Content-Type'] = 'application/json'
+  const header = Object.assign({}, options.header || {})
+  header['Content-Type'] = header['Content-Type'] || 'application/json'
+  header['X-Client-Platform'] = getPlatformName()
   if (token) header.Authorization = 'Bearer ' + token
 
   return new Promise(function (resolve, reject) {
     uni.request({
-      url: API_BASE + path,
+      url: makeRequestUrl(path),
       method: method,
       data: data,
       header: header,
+      timeout: options.timeout || 18000,
       success: function (res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.data || {})
@@ -90,7 +129,49 @@ function request(path, options) {
         }
       },
       fail: function (err) {
-        reject(new Error(err.errMsg || '网络请求失败，请检查后端地址和防火墙'))
+        reject(new Error((err && err.errMsg) || '网络请求失败，请检查后端地址和防火墙'))
+      }
+    })
+  })
+}
+
+function healthCheck() {
+  return new Promise(function (resolve, reject) {
+    uni.request({
+      url: ORIGIN + '/health',
+      method: 'GET',
+      timeout: 8000,
+      success: function (res) {
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data || { ok: true })
+        else reject(new Error('健康检查失败：' + res.statusCode))
+      },
+      fail: function (err) {
+        reject(new Error((err && err.errMsg) || '无法连接后端'))
+      }
+    })
+  })
+}
+
+function uploadFile(path, filePath, formData) {
+  const token = getToken()
+  const header = { 'X-Client-Platform': getPlatformName() }
+  if (token) header.Authorization = 'Bearer ' + token
+  return new Promise(function (resolve, reject) {
+    uni.uploadFile({
+      url: makeRequestUrl(path),
+      filePath: filePath,
+      name: 'file',
+      formData: formData || {},
+      header: header,
+      success: function (res) {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try { resolve(JSON.parse(res.data || '{}')) } catch (e) { resolve(res.data || {}) }
+        } else {
+          reject(new Error('上传失败：' + res.statusCode))
+        }
+      },
+      fail: function (err) {
+        reject(new Error((err && err.errMsg) || '上传失败'))
       }
     })
   })
@@ -126,10 +207,19 @@ function showError(e, fallback) {
 }
 
 export {
+  LOCAL_ORIGIN,
+  LAN_ORIGIN,
+  PROD_ORIGIN,
+  USE_PROD,
   ORIGIN,
   SERVER_ORIGIN,
   API_BASE,
+  getPlatformName,
+  getPlatformLabel,
+  systemInfo,
   request,
+  healthCheck,
+  uploadFile,
   toAbsoluteUrl,
   normalizeBook,
   normalizeBooks,
