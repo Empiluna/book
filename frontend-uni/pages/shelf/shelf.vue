@@ -60,7 +60,31 @@ export default {
     goLogin: function () { uni.navigateTo({ url: '/pages/login/login' }) },
     goSearch: function () { uni.switchTab({ url: '/pages/search/search' }) },
     goDetail: function (book) { uni.navigateTo({ url: '/pages/detail/detail?id=' + (book.id || book.book_id) }) },
-    continueRead: function (item) { const b = item.book || {}; uni.navigateTo({ url: '/pages/reader/reader?id=' + (b.id || b.book_id) }) },
+    getContinuePage: function (item) {
+      item = item || {}
+      const candidates = [
+        item.current_page,
+        item.page,
+        item.last_page,
+        item.reading_page,
+        item.progress && item.progress.current_page,
+        item.reading_record && item.reading_record.current_page,
+        item.book && item.book.current_page
+      ]
+      for (let i = 0; i < candidates.length; i++) {
+        const page = parseInt(candidates[i], 10)
+        if (page && page > 0) return page
+      }
+      return 1
+    },
+    continueRead: function (item) {
+      item = item || {}
+      const b = item.book || {}
+      const id = b.id || b.book_id || item.book_id || item.id
+      if (!id) { uni.showToast({ title: '未找到图书ID', icon: 'none' }); return }
+      const page = this.getContinuePage(item)
+      uni.navigateTo({ url: '/pages/reader/reader?id=' + encodeURIComponent(id) + '&page=' + encodeURIComponent(page) })
+    },
     move: function (item, target) {
       const that = this; const b = item.book || {}; const status = target === '已读' ? 'read' : 'reading'
       request('/ecosystem/shelves/book/' + (b.id || b.book_id), { method: 'POST', data: { shelf_name: target, reading_status: status } }).then(function () { uni.showToast({ title: '已加入' + target }); that.load() }).catch(function (e) { showError(e, '操作失败') })
