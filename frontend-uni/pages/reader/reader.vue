@@ -29,14 +29,16 @@ export default {
   },
   onLoad(options) {
     const id = (options && (options.id || options.book_id)) || 1
+    const page = Math.max(1, parseInt(options && (options.page || options.current_page || options.last_page), 10) || 1)
     const token = getToken()
     const platform = getPlatformName()
     const query = [
       'book_id=' + encodeURIComponent(id),
+      'page=' + encodeURIComponent(page),
       'record=0',
       'from=uni',
       'platform=' + encodeURIComponent(platform),
-      'v=mobile-reader-one-page-1'
+      'v=mobile-reader-continue-page-1'
     ]
     if (token) query.push('token=' + encodeURIComponent(token))
     this.readerUrl = SERVER_ORIGIN + '/static/reader.html?' + query.join('&')
