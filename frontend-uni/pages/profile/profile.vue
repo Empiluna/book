@@ -112,7 +112,31 @@ export default {
     doLogout: function () { logout(); this.load(); uni.showToast({ title: '已退出', icon: 'success' }) },
     rebuildProfile: function () { const that = this; request('/user/profile/rebuild', { method: 'POST' }).then(function () { uni.showToast({ title: '画像已重建', icon: 'success' }); that.load() }).catch(function (e) { showError(e, '重建失败') }) },
     goDetail: function (book) { if (book) uni.navigateTo({ url: '/pages/detail/detail?id=' + (book.id || book.book_id) }) },
-    continueRead: function (item) { const b = item.book || {}; uni.navigateTo({ url: '/pages/reader/reader?id=' + (b.id || b.book_id) }) }
+    getContinuePage: function (item) {
+      item = item || {}
+      const candidates = [
+        item.current_page,
+        item.page,
+        item.last_page,
+        item.reading_page,
+        item.progress && item.progress.current_page,
+        item.reading_record && item.reading_record.current_page,
+        item.book && item.book.current_page
+      ]
+      for (let i = 0; i < candidates.length; i++) {
+        const page = parseInt(candidates[i], 10)
+        if (page && page > 0) return page
+      }
+      return 1
+    },
+    continueRead: function (item) {
+      item = item || {}
+      const b = item.book || {}
+      const id = b.id || b.book_id || item.book_id || item.id
+      if (!id) { uni.showToast({ title: '未找到图书ID', icon: 'none' }); return }
+      const page = this.getContinuePage(item)
+      uni.navigateTo({ url: '/pages/reader/reader?id=' + encodeURIComponent(id) + '&page=' + encodeURIComponent(page) })
+    }
   }
 }
 </script>
